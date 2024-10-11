@@ -530,7 +530,6 @@ schedule.every().day.at("08:00").do(job)
 schedule.every().day.at("12:00").do(job)
 schedule.every().day.at("16:00").do(job)
 schedule.every().day.at("20:00").do(job)
-schedule.every().day.at("24:00").do(job)
 
 while True:
     schedule.run_pending()
