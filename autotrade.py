@@ -348,7 +348,7 @@ def ai_trading():
     # 6. YouTube 자막 데이터 가져오기
     # youtube_transcript = get_combined_transcript("3XbtEX3jUv4")  # 여기에 실제 비트코인 관련 YouTube 영상 ID를 넣으세요 (로컬용)
     
-    f = open("stragegy.txt", "r", encoding="utf-8") # 직접 저장한 텍스트를 넣어주기 (EC2 서버용)  
+    f = open("strategy.txt", "r", encoding="utf-8") # 직접 저장한 텍스트를 넣어주기 (EC2 서버용)  
     youtube_transcript = f.read()
     f.close()
 
