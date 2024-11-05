@@ -27,6 +27,7 @@ import schedule
 from pydantic import BaseModel
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import ccxt
+import pytz
 
 class PortfolioAllocation(BaseModel):
     target_btc_ratio: float
@@ -58,8 +59,10 @@ def log_trade(decision, percentage, reason, btc_balance, krw_balance, btc_avg_bu
     try:
         conn = sqlite3.connect('bitcoin_trades.db')
         c = conn.cursor()
-        # 타임스탬프를 UTC로 기록
-        timestamp = datetime.utcnow().isoformat()
+        
+        # 뉴욕 시간대로 타임스탬프 생성
+        ny_timezone = pytz.timezone("America/New_York")
+        timestamp = datetime.now(ny_timezone).isoformat()
 
         # 중복 검사를 제거하고 모든 기록을 저장
         c.execute("""
@@ -670,6 +673,42 @@ def job():
     except Exception as e:
         logger.error(f"An error occurred: {e}")
 
+# if __name__ == "__main__":
+#     # 로깅 설정
+#     logging.basicConfig(level=logging.INFO)
+#     logger = logging.getLogger(__name__)
+
+#     load_dotenv()
+
+#     # 데이터베이스 초기화
+#     init_db()
+
+#     # # 테스트용 바로 실행
+#     # job()
+
+#     # # 매일 특정 시간에 실행
+#     # schedule.every().day.at("00:00").do(job)
+#     # schedule.every().day.at("04:00").do(job)
+#     # schedule.every().day.at("08:00").do(job)
+#     # schedule.every().day.at("12:00").do(job)
+#     # schedule.every().day.at("16:00").do(job)
+#     # schedule.every().day.at("20:00").do(job)
+
+#     while True:
+#         schedule.run_pending()
+#         time.sleep(1)
+
+def schedule_jobs():
+    ny_timezone = pytz.timezone("America/New_York")
+    schedule.every().day.at("00:00").do(job)
+    schedule.every().day.at("08:00").do(job)
+    schedule.every().day.at("16:00").do(job)
+
+    while True:
+        now = datetime.now(ny_timezone)
+        schedule.run_pending()
+        time.sleep(1)
+
 if __name__ == "__main__":
     # 로깅 설정
     logging.basicConfig(level=logging.INFO)
@@ -680,31 +719,5 @@ if __name__ == "__main__":
     # 데이터베이스 초기화
     init_db()
 
-    # # 테스트용 바로 실행
-    # job()
-
-    # # 매일 특정 시간에 실행
-    # schedule.every().day.at("00:00").do(job)
-    # schedule.every().day.at("04:00").do(job)
-    # schedule.every().day.at("08:00").do(job)
-    # schedule.every().day.at("12:00").do(job)
-    # schedule.every().day.at("16:00").do(job)
-    # schedule.every().day.at("20:00").do(job)
-
-    # # 표준시 기간 동안
-    # schedule.every().day.at("14:00").do(job)  # 뉴욕 00:00
-    # schedule.every().day.at("18:00").do(job)  # 뉴욕 04:00
-    # schedule.every().day.at("22:00").do(job)  # 뉴욕 08:00
-    # schedule.every().day.at("02:00").do(job)  # 뉴욕 12:00
-    # schedule.every().day.at("06:00").do(job)  # 뉴욕 16:00
-    # schedule.every().day.at("10:00").do(job)  # 뉴욕 20:00
-
-    # 뉴욕 표준시간 기준 0시, 8시, 16시에 매매 실행
-    # 한국 시간 기준 14시, 22시, 다음 날 06시에 매매 실행
-    schedule.every().day.at("14:00").do(job)  # 뉴욕 00:00
-    schedule.every().day.at("22:00").do(job)  # 뉴욕 08:00
-    schedule.every().day.at("06:00").do(job)  # 뉴욕 16:00
-
-    while True:
-        schedule.run_pending()
-        time.sleep(1)
+    # 스케줄 작업 실행
+    schedule_jobs()
