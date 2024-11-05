@@ -100,17 +100,20 @@ def calculate_performance(trades_df):
 def generate_reflection(trades_df, current_market_data, wonyyotti_strategy):
     performance = calculate_performance(trades_df)
 
-    client = OpenAI()
+        client = OpenAI()
     response = client.chat.completions.create(
-        model="gpt-4o-2024-08-06",
-        messages=[
-            {
-                "role": "system",
-                "content": "You are an AI trading assistant tasked with analyzing recent trading performance and current market conditions to generate insights and improvements for future trading decisions."
-            },
-            {
-                "role": "user",
-                "content": f"""
+    model="gpt-4o-2024-08-06",
+    messages=[
+        {
+            "role": "system",
+            "content": (
+                "You are an AI trading assistant tasked with analyzing recent trading performance and "
+                "current market conditions to generate insights and improvements for future trading decisions."
+            )
+        },
+        {
+            "role": "user",
+            "content": f"""
                 Recent trading data:
                 {trades_df.to_json(orient='records')}
 
