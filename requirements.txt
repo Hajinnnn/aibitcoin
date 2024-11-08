@@ -13,4 +13,7 @@ webull
 yfinance
 ccxt
 pytz
+xgboost
 optuna
+scikit-learn
+numpy
