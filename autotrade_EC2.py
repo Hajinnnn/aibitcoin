@@ -530,7 +530,7 @@ KRW-USD 프리미엄 (%): {premium_formatted}
     )
 
     try:
-        result_content = response['choices'][0]['message']['content']
+        result_content = response.choices[0].message.content
         result = json.loads(result_content)
         openai_target_btc_ratio = result['target_btc_ratio']
         openai_reason = result['reason']
