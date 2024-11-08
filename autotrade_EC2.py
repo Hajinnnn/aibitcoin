@@ -1,3 +1,4 @@
+# 필요한 라이브러리 임포트
 import os
 from dotenv import load_dotenv
 import pyupbit
@@ -18,12 +19,12 @@ import ccxt
 import pytz
 import xgboost as xgb
 import optuna
-from sklearn.model_selection import train_test_split, TimeSeriesSplit
+from sklearn.model_selection import TimeSeriesSplit
 from sklearn.metrics import accuracy_score
 from sklearn.preprocessing import LabelEncoder
 from threading import Lock
 import numpy as np
-import openai
+import openai  # OpenAI 라이브러리 임포트
 
 # 로깅 설정
 logger = logging.getLogger(__name__)
@@ -92,7 +93,11 @@ def get_recent_trades(days=30):
         thirty_days_ago = (datetime.now() - timedelta(days=days)).isoformat()
         c.execute("SELECT * FROM trades WHERE timestamp > ? ORDER BY timestamp DESC", (thirty_days_ago,))
         columns = [column[0] for column in c.description]
-        df = pd.DataFrame.from_records(data=c.fetchall(), columns=columns)
+        data = c.fetchall()
+        if not data:
+            logger.info("No recent trades found.")
+            return pd.DataFrame()
+        df = pd.DataFrame.from_records(data=data, columns=columns)
     df['timestamp'] = pd.to_datetime(df['timestamp'], utc=True, errors='coerce')
     logger.info(f"Fetched {len(df)} recent trades.")
     return df
@@ -322,7 +327,6 @@ def ai_trading():
         X = merged_df[feature_columns]
         y = merged_df['decision_label']
 
-        logger.info(f"머신러닝 모델 학습을 위한 데이터 준비 완료. 샘플 수: {len(X)}")
         return X, y, label_encoder
 
     X, y, label_encoder = prepare_ml_data()
@@ -376,7 +380,7 @@ def ai_trading():
         ml_prediction = model.predict(latest_X)[0]
         ml_decision = label_encoder.inverse_transform([ml_prediction])[0]
     else:
-        logger.info("머신러닝 모델을 학습하기에 충분한 데이터가 없습니다. 기본값으로 'hold'를 사용합니다.")
+        logger.info("머신러닝 모델을 학습하기에 충분한 데이터가 없습니다. OpenAI API의 결정을 기본값으로 사용합니다.")
         ml_decision = "hold"
 
     # OpenAI API를 사용하여 목표 비중 계산
@@ -454,10 +458,10 @@ KRW-USD 프리미엄 (%): {premium_formatted}
         openai_reason = result['reason']
     except Exception as e:
         logger.error(f"Error parsing OpenAI response: {e}")
-        openai_target_btc_ratio = None
-        openai_reason = "OpenAI API 응답 오류로 인해 현재 비중 유지"
+        openai_target_btc_ratio = 0  # 기본값 설정
+        openai_reason = "OpenAI API 응답 오류로 인해 비트코인 비중을 0으로 설정"
 
-    # 현재 포트폴리오 비중 계산
+    # 머신러닝 모델과 OpenAI 모델의 결정을 결합하여 최종 결정
     time.sleep(1)
     balances = upbit.get_balances()
     btc_balance = next((float(balance['balance']) for balance in balances if balance['currency'] == 'BTC'), 0)
@@ -467,18 +471,13 @@ KRW-USD 프리미엄 (%): {premium_formatted}
     total_asset = krw_balance + btc_balance * current_btc_price
     current_btc_ratio = (btc_balance * current_btc_price) / total_asset * 100 if total_asset > 0 else 0
 
-    # 머신러닝 모델과 OpenAI 모델의 결정을 결합하여 최종 결정
-    if openai_target_btc_ratio is not None:
-        if ml_decision == "hold":
-            final_target_btc_ratio = (openai_target_btc_ratio + current_btc_ratio) / 2
-        elif ml_decision == "buy":
-            final_target_btc_ratio = min(openai_target_btc_ratio + 10, 100)
-        elif ml_decision == "sell":
-            final_target_btc_ratio = max(openai_target_btc_ratio - 10, 0)
-        else:
-            final_target_btc_ratio = openai_target_btc_ratio
+    # 머신러닝 모델과 OpenAI 모델의 목표 비중 평균을 사용
+    if ml_decision == "buy":
+        final_target_btc_ratio = max(openai_target_btc_ratio, current_btc_ratio + 5)  # 최소 5% 이상 증가
+    elif ml_decision == "sell":
+        final_target_btc_ratio = min(openai_target_btc_ratio, current_btc_ratio - 5)  # 최소 5% 이상 감소
     else:
-        final_target_btc_ratio = current_btc_ratio  # OpenAI 응답 오류 시 현재 비중 유지
+        final_target_btc_ratio = (openai_target_btc_ratio + current_btc_ratio) / 2
 
     # 목표 비중과 현재 비중의 차이 계산
     difference = final_target_btc_ratio - current_btc_ratio
@@ -498,7 +497,7 @@ KRW-USD 프리미엄 (%): {premium_formatted}
             logger.info("### Buy Order Failed: Insufficient KRW amount ###")
     elif difference < 0:
         # 매도 실행
-        sell_amount_btc = btc_balance * (-difference / current_btc_ratio) if current_btc_ratio != 0 else 0
+        sell_amount_btc = btc_balance * (-difference / current_btc_ratio)
         if sell_amount_btc * current_btc_price > 5000:
             logger.info(f"### Sell Order Executed: {sell_amount_btc:.8f} BTC ###")
             order = upbit.sell_market_order("KRW-BTC", sell_amount_btc)
