@@ -193,6 +193,16 @@ def get_bitcoin_news():
         logger.error(f"뉴스 데이터 가져오기 오류: {e}")
         return []
 
+def convert_timestamps_in_data(data):
+    if isinstance(data, dict):
+        return {k: convert_timestamps_in_data(v) for k, v in data.items()}
+    elif isinstance(data, list):
+        return [convert_timestamps_in_data(v) for v in data]
+    elif isinstance(data, (pd.Timestamp, datetime)):
+        return data.isoformat()
+    else:
+        return data
+
 def ai_trading():
     load_environment()
     access = os.getenv("UPBIT_ACCESS_KEY")
@@ -435,21 +445,37 @@ def ai_trading():
     df_daily_usd.reset_index(inplace=True)
     df_hourly_usd.reset_index(inplace=True)
 
+    # DataFrames를 dict로 변환하고 Timestamp를 문자열로 변환
+    df_daily_krw_data = convert_timestamps_in_data(df_daily_krw.to_dict(orient='records'))
+    df_hourly_krw_data = convert_timestamps_in_data(df_hourly_krw.to_dict(orient='records'))
+    df_daily_usd_data = convert_timestamps_in_data(df_daily_usd.to_dict(orient='records'))
+    df_hourly_usd_data = convert_timestamps_in_data(df_hourly_usd.to_dict(orient='records'))
+
+    # 기타 데이터들도 Timestamp를 문자열로 변환
+    filtered_balances = convert_timestamps_in_data(filtered_balances)
+    orderbook = convert_timestamps_in_data(orderbook)
+    news_headlines = convert_timestamps_in_data(news_headlines)
+    fear_greed_index = convert_timestamps_in_data(fear_greed_index)
+
     # OpenAI API를 사용하여 목표 비중 계산
     openai.api_key = os.getenv("OPENAI_API_KEY")
 
     recent_trades = get_recent_trades()
+    trades_data = convert_timestamps_in_data(recent_trades.to_dict(orient='records'))
+
     current_market_data = {
         "fear_greed_index": fear_greed_index,
         "news_headlines": news_headlines,
         "orderbook": orderbook,
-        "daily_ohlcv_krw": df_daily_krw.to_dict(),
-        "hourly_ohlcv_krw": df_hourly_krw.to_dict(),
-        "daily_ohlcv_usd": df_daily_usd.to_dict(),
-        "hourly_ohlcv_usd": df_hourly_usd.to_dict(),
+        "daily_ohlcv_krw": df_daily_krw_data,
+        "hourly_ohlcv_krw": df_hourly_krw_data,
+        "daily_ohlcv_usd": df_daily_usd_data,
+        "hourly_ohlcv_usd": df_hourly_usd_data,
         "usd_krw_rate": usd_krw_rate,
         "krw_usd_premium": premium,
     }
+
+    current_market_data = convert_timestamps_in_data(current_market_data)
 
     reflection = generate_reflection(recent_trades, current_market_data, wonyyotti_strategy)
 
@@ -489,10 +515,10 @@ def ai_trading():
                 "role": "user",
                 "content": f"""현재 투자 현황: {json.dumps(filtered_balances)}
 주문장: {json.dumps(orderbook)}
-KRW 일간 OHLCV 지표 (30일): {df_daily_krw.to_json(orient='records')}
-KRW 시간별 OHLCV 지표 (24시간): {df_hourly_krw.to_json(orient='records')}
-USD 일간 OHLCV 지표 (30일): {df_daily_usd.to_json(orient='records')}
-USD 시간별 OHLCV 지표 (24시간): {df_hourly_usd.to_json(orient='records')}
+KRW 일간 OHLCV 지표 (30일): {json.dumps(df_daily_krw_data)}
+KRW 시간별 OHLCV 지표 (24시간): {json.dumps(df_hourly_krw_data)}
+USD 일간 OHLCV 지표 (30일): {json.dumps(df_daily_usd_data)}
+USD 시간별 OHLCV 지표 (24시간): {json.dumps(df_hourly_usd_data)}
 USD/KRW 환율: {usd_krw_rate}
 KRW-USD 프리미엄 (%): {premium_formatted}
 최근 뉴스 헤드라인: {json.dumps(news_headlines)}
@@ -590,6 +616,9 @@ def generate_reflection(trades_df, current_market_data, wonyyotti_strategy):
     performance = calculate_performance(trades_df)
     openai.api_key = os.getenv("OPENAI_API_KEY")
 
+    trades_data = convert_timestamps_in_data(trades_df.to_dict(orient='records'))
+    current_market_data = convert_timestamps_in_data(current_market_data)
+
     response = openai.ChatCompletion.create(
         model="gpt-4o-2024-08-06",
         messages=[
@@ -604,7 +633,7 @@ def generate_reflection(trades_df, current_market_data, wonyyotti_strategy):
                 "role": "user",
                 "content": f"""
 최근 거래 데이터:
-{trades_df.to_json(orient='records')}
+{json.dumps(trades_data)}
 
 현재 시장 데이터:
 {json.dumps(current_market_data)}
@@ -657,7 +686,6 @@ def job():
 #     schedule.every().day.at("08:00").do(job)
 #     schedule.every().day.at("16:00").do(job)
 
-#     logger.info("스케줄 작업이 설정되었습니다. 트레이딩 봇이 시작됩니다.")
 #     try:
 #         while True:
 #             schedule.run_pending()
@@ -669,5 +697,4 @@ if __name__ == "__main__":
     init_db()
     logger.info("스케줄 작업을 시작합니다.")
     # schedule_jobs()
-
-job()
+    job()
