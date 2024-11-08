@@ -429,6 +429,12 @@ def ai_trading():
         logger.info("머신러닝 모델을 학습하기에 충분한 데이터가 없습니다. OpenAI API의 결정을 기본값으로 사용합니다.")
         ml_decision = "hold"
 
+    # 데이터 수집 후, 인덱스 재설정
+    df_daily_krw.reset_index(inplace=True)
+    df_hourly_krw.reset_index(inplace=True)
+    df_daily_usd.reset_index(inplace=True)
+    df_hourly_usd.reset_index(inplace=True)
+
     # OpenAI API를 사용하여 목표 비중 계산
     openai.api_key = os.getenv("OPENAI_API_KEY")
 
@@ -483,10 +489,10 @@ def ai_trading():
                 "role": "user",
                 "content": f"""현재 투자 현황: {json.dumps(filtered_balances)}
 주문장: {json.dumps(orderbook)}
-KRW 일간 OHLCV 지표 (30일): {df_daily_krw.to_json()}
-KRW 시간별 OHLCV 지표 (24시간): {df_hourly_krw.to_json()}
-USD 일간 OHLCV 지표 (30일): {df_daily_usd.to_json()}
-USD 시간별 OHLCV 지표 (24시간): {df_hourly_usd.to_json()}
+KRW 일간 OHLCV 지표 (30일): {df_daily_krw.to_json(orient='records')}
+KRW 시간별 OHLCV 지표 (24시간): {df_hourly_krw.to_json(orient='records')}
+USD 일간 OHLCV 지표 (30일): {df_daily_usd.to_json(orient='records')}
+USD 시간별 OHLCV 지표 (24시간): {df_hourly_usd.to_json(orient='records')}
 USD/KRW 환율: {usd_krw_rate}
 KRW-USD 프리미엄 (%): {premium_formatted}
 최근 뉴스 헤드라인: {json.dumps(news_headlines)}
