@@ -30,11 +30,18 @@ import openai  # OpenAI 라이브러리 임포트
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-# 로그 파일 핸들러 설정
-handler = RotatingFileHandler('trading_bot.log', maxBytes=5*1024*1024, backupCount=2)
+# 로그 포맷 설정
 formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-handler.setFormatter(formatter)
-logger.addHandler(handler)
+
+# 파일 핸들러 설정
+file_handler = RotatingFileHandler('trading_bot.log', maxBytes=5*1024*1024, backupCount=2)
+file_handler.setFormatter(formatter)
+logger.addHandler(file_handler)
+
+# 콘솔 핸들러 설정
+console_handler = logging.StreamHandler()
+console_handler.setFormatter(formatter)
+logger.addHandler(console_handler)
 
 data_lock = Lock()  # 스레드 안전성을 위한 Lock 객체
 
@@ -69,6 +76,7 @@ def init_db():
                     executed_percentage REAL,
                     reflection TEXT)''')
         conn.commit()
+    logger.info("데이터베이스 초기화 완료.")
 
 def log_trade(**kwargs):
     try:
@@ -84,8 +92,9 @@ def log_trade(**kwargs):
             sql = f"INSERT INTO trades ({columns}) VALUES ({placeholders})"
             c.execute(sql, tuple(kwargs.values()))
             conn.commit()
+        logger.info("거래 정보가 데이터베이스에 기록되었습니다.")
     except Exception as e:
-        logger.error(f"Error logging trade: {e}")
+        logger.error(f"거래 기록 오류: {e}")
 
 def get_recent_trades(days=30):
     with sqlite3.connect('bitcoin_trades.db') as conn:
@@ -95,11 +104,11 @@ def get_recent_trades(days=30):
         columns = [column[0] for column in c.description]
         data = c.fetchall()
         if not data:
-            logger.info("No recent trades found.")
+            logger.info("최근 거래 내역이 없습니다.")
             return pd.DataFrame()
         df = pd.DataFrame.from_records(data=data, columns=columns)
     df['timestamp'] = pd.to_datetime(df['timestamp'], utc=True, errors='coerce')
-    logger.info(f"Fetched {len(df)} recent trades.")
+    logger.info(f"최근 {len(df)}건의 거래 내역을 가져왔습니다.")
     return df
 
 def calculate_performance(trades_df):
@@ -107,39 +116,48 @@ def calculate_performance(trades_df):
         return 0
     initial_balance = trades_df.iloc[-1]['krw_balance'] + trades_df.iloc[-1]['btc_balance'] * trades_df.iloc[-1]['btc_krw_price']
     final_balance = trades_df.iloc[0]['krw_balance'] + trades_df.iloc[0]['btc_balance'] * trades_df.iloc[0]['btc_krw_price']
-    return (final_balance - initial_balance) / initial_balance * 100
+    performance = (final_balance - initial_balance) / initial_balance * 100
+    logger.info(f"최근 30일간의 거래 성과: {performance:.2f}%")
+    return performance
 
 def add_indicators(df):
-    # 볼린저 밴드
-    indicator_bb = ta.volatility.BollingerBands(close=df['close'], window=20, window_dev=2)
-    df['bb_bbm'] = indicator_bb.bollinger_mavg()
-    df['bb_bbh'] = indicator_bb.bollinger_hband()
-    df['bb_bbl'] = indicator_bb.bollinger_lband()
+    if df.empty:
+        logger.warning("지표를 추가할 데이터가 없습니다.")
+        return df
+    try:
+        # 볼린저 밴드
+        indicator_bb = ta.volatility.BollingerBands(close=df['close'], window=20, window_dev=2)
+        df['bb_bbm'] = indicator_bb.bollinger_mavg()
+        df['bb_bbh'] = indicator_bb.bollinger_hband()
+        df['bb_bbl'] = indicator_bb.bollinger_lband()
 
-    # RSI
-    df['rsi'] = ta.momentum.RSIIndicator(close=df['close'], window=14).rsi()
+        # RSI
+        df['rsi'] = ta.momentum.RSIIndicator(close=df['close'], window=14).rsi()
 
-    # MFI
-    df['mfi'] = ta.volume.MFIIndicator(
-        high=df['high'],
-        low=df['low'],
-        close=df['close'],
-        volume=df['volume'],
-        window=14
-    ).money_flow_index()
+        # MFI
+        df['mfi'] = ta.volume.MFIIndicator(
+            high=df['high'],
+            low=df['low'],
+            close=df['close'],
+            volume=df['volume'],
+            window=14
+        ).money_flow_index()
 
-    # MACD
-    macd = ta.trend.MACD(close=df['close'])
-    df['macd'] = macd.macd()
-    df['macd_signal'] = macd.macd_signal()
-    df['macd_diff'] = macd.macd_diff()
+        # MACD
+        macd = ta.trend.MACD(close=df['close'])
+        df['macd'] = macd.macd()
+        df['macd_signal'] = macd.macd_signal()
+        df['macd_diff'] = macd.macd_diff()
 
-    # 이동평균선
-    df['ema_20'] = ta.trend.EMAIndicator(close=df['close'], window=20).ema_indicator()
-    df['ema_50'] = ta.trend.EMAIndicator(close=df['close'], window=50).ema_indicator()
-    df['ema_120'] = ta.trend.EMAIndicator(close=df['close'], window=120).ema_indicator()
-    df['ema_200'] = ta.trend.EMAIndicator(close=df['close'], window=200).ema_indicator()
+        # 이동평균선
+        df['ema_20'] = ta.trend.EMAIndicator(close=df['close'], window=20).ema_indicator()
+        df['ema_50'] = ta.trend.EMAIndicator(close=df['close'], window=50).ema_indicator()
+        df['ema_120'] = ta.trend.EMAIndicator(close=df['close'], window=120).ema_indicator()
+        df['ema_200'] = ta.trend.EMAIndicator(close=df['close'], window=200).ema_indicator()
 
+        logger.info("기술적 지표 추가 완료.")
+    except Exception as e:
+        logger.error(f"지표 추가 오류: {e}")
     return df
 
 def get_fear_and_greed_index():
@@ -148,9 +166,10 @@ def get_fear_and_greed_index():
         response = requests.get(url)
         response.raise_for_status()
         data = response.json()
+        logger.info("공포와 탐욕 지수 데이터를 가져왔습니다.")
         return data['data'][0]
     except requests.RequestException as e:
-        logger.error(f"Failed to fetch Fear and Greed Index. Error: {e}")
+        logger.error(f"공포와 탐욕 지수 데이터 가져오기 실패: {e}")
         return {"value": 50}
 
 def get_bitcoin_news():
@@ -168,9 +187,10 @@ def get_bitcoin_news():
         data = response.json()
         news_results = data.get("news_results", [])
         headlines = [{"title": item.get("title", ""), "date": item.get("date", "")} for item in news_results]
+        logger.info("비트코인 뉴스 데이터를 가져왔습니다.")
         return headlines[:10]
     except requests.RequestException as e:
-        logger.error(f"Error fetching news: {e}")
+        logger.error(f"뉴스 데이터 가져오기 오류: {e}")
         return []
 
 def ai_trading():
@@ -187,17 +207,19 @@ def ai_trading():
         try:
             all_balances = upbit.get_balances()
             filtered_balances = [balance for balance in all_balances if balance['currency'] in ['BTC', 'KRW']]
+            logger.info("잔고 데이터를 가져왔습니다.")
             return filtered_balances
         except Exception as e:
-            logger.error(f"Error fetching balances: {e}")
+            logger.error(f"잔고 데이터 가져오기 오류: {e}")
             return []
 
     def fetch_orderbook():
         try:
             orderbook = pyupbit.get_orderbook("KRW-BTC")
+            logger.info("호가창 데이터를 가져왔습니다.")
             return orderbook
         except Exception as e:
-            logger.error(f"Error fetching orderbook: {e}")
+            logger.error(f"호가창 데이터 가져오기 오류: {e}")
             return {}
 
     def fetch_ohlcv(market, interval, count):
@@ -205,9 +227,10 @@ def ai_trading():
             df = pyupbit.get_ohlcv(market, interval=interval, count=count)
             df = dropna(df)
             df = add_indicators(df)
+            logger.info(f"{market}의 {interval} 데이터 가져오기 완료.")
             return df
         except Exception as e:
-            logger.error(f"Error fetching OHLCV data: {e}")
+            logger.error(f"{market}의 {interval} 데이터 가져오기 오류: {e}")
             return pd.DataFrame()
 
     def fetch_usd_ohlcv(timeframe, limit):
@@ -219,9 +242,10 @@ def ai_trading():
             df.set_index('timestamp', inplace=True)
             df = dropna(df)
             df = add_indicators(df)
+            logger.info(f"USD-BTC의 {timeframe} 데이터 가져오기 완료.")
             return df
         except Exception as e:
-            logger.error(f"Error fetching USD OHLCV data: {e}")
+            logger.error(f"USD-BTC의 {timeframe} 데이터 가져오기 오류: {e}")
             return pd.DataFrame()
 
     def fetch_fear_and_greed():
@@ -237,9 +261,10 @@ def ai_trading():
         try:
             response = requests.get("https://api.exchangerate-api.com/v4/latest/USD")
             data = response.json()
+            logger.info("USD/KRW 환율 데이터를 가져왔습니다.")
             return data['rates']['KRW']
         except Exception as e:
-            logger.error(f"Error fetching USD/KRW exchange rate: {e}")
+            logger.error(f"USD/KRW 환율 데이터 가져오기 오류: {e}")
             return None
 
     # 데이터 수집 실행
@@ -262,7 +287,7 @@ def ai_trading():
             key = futures[future]
             try:
                 results[key] = future.result()
-                logger.info(f"{key} 데이터 수집 완료")
+                logger.info(f"{key} 데이터 수집 완료.")
             except Exception as e:
                 logger.error(f"{key} 데이터 수집 중 오류 발생: {e}")
                 results[key] = None
@@ -281,6 +306,8 @@ def ai_trading():
 
     # 필요한 컬럼만 선택
     def select_columns(df):
+        if df.empty:
+            return df
         return df[['open', 'high', 'low', 'close', 'volume', 'rsi', 'macd', 'macd_signal', 'bb_bbm', 'bb_bbh', 'bb_bbl', 'mfi', 'ema_20', 'ema_50', 'ema_120', 'ema_200']]
 
     df_daily_krw = select_columns(df_daily_krw)
@@ -292,11 +319,16 @@ def ai_trading():
     if not df_hourly_usd.empty and usd_krw_rate:
         usd_price = df_hourly_usd['close'].iloc[-1]
         krw_price = pyupbit.get_current_price("KRW-BTC")
-        usd_price_in_krw = usd_price * usd_krw_rate
-        premium = ((krw_price - usd_price_in_krw) / usd_price_in_krw) * 100
+        if usd_price is not None and krw_price is not None:
+            usd_price_in_krw = usd_price * usd_krw_rate
+            premium = ((krw_price - usd_price_in_krw) / usd_price_in_krw) * 100
+            logger.info(f"괴리율 계산 완료: {premium:.2f}%")
+        else:
+            premium = None
+            logger.error("USD 가격 또는 KRW 가격이 유효하지 않습니다.")
     else:
         premium = None
-        logger.error("USD OHLCV data or USD/KRW exchange rate is unavailable.")
+        logger.error("USD OHLCV 데이터 또는 USD/KRW 환율이 유효하지 않습니다.")
 
     premium_formatted = f"{premium:.2f}" if premium is not None else "N/A"
 
@@ -320,13 +352,18 @@ def ai_trading():
         merged_df['premium'] = premium
 
         label_encoder = LabelEncoder()
-        merged_df['decision_label'] = label_encoder.fit_transform(merged_df['decision'])
+        if 'decision' in merged_df.columns:
+            merged_df['decision_label'] = label_encoder.fit_transform(merged_df['decision'])
+        else:
+            logger.error("'decision' 컬럼이 존재하지 않습니다.")
+            return None, None, None
 
         merged_df.dropna(subset=feature_columns + ['decision_label'], inplace=True)
 
         X = merged_df[feature_columns]
         y = merged_df['decision_label']
 
+        logger.info(f"머신러닝 모델 학습을 위한 데이터 준비 완료: X 샘플 수={len(X)}, y 샘플 수={len(y)}")
         return X, y, label_encoder
 
     X, y, label_encoder = prepare_ml_data()
@@ -335,6 +372,8 @@ def ai_trading():
         num_samples = len(X)
         n_splits = min(5, max(2, num_samples - 1))
         tscv = TimeSeriesSplit(n_splits=n_splits)
+        logger.info(f"TimeSeriesSplit 설정: n_splits={n_splits}")
+
         def objective(trial):
             param = {
                 'objective': 'multi:softprob',
@@ -356,21 +395,27 @@ def ai_trading():
                 X_train, X_val = X.iloc[train_index], X.iloc[test_index]
                 y_train, y_val = y.iloc[train_index], y.iloc[test_index]
 
-                model = xgb.XGBClassifier(**param, use_label_encoder=False)
+                model = xgb.XGBClassifier(**param, use_label_encoder=False, eval_metric='mlogloss')
                 model.fit(X_train, y_train)
 
                 preds = model.predict(X_val)
                 accuracy = accuracy_score(y_val, preds)
                 accuracy_scores.append(accuracy)
 
-            return -np.mean(accuracy_scores)
+            mean_accuracy = np.mean(accuracy_scores)
+            logger.info(f"Trial {trial.number}의 평균 정확도: {mean_accuracy:.4f}")
+            return -mean_accuracy
 
         study = optuna.create_study(direction='minimize')
+        logger.info("Optuna 하이퍼파라미터 최적화 시작.")
         study.optimize(objective, n_trials=30)
 
         best_params = study.best_params
-        model = xgb.XGBClassifier(**best_params, use_label_encoder=False)
+        logger.info(f"Optuna 최적화 완료. 최적 파라미터: {best_params}")
+
+        model = xgb.XGBClassifier(**best_params, use_label_encoder=False, eval_metric='mlogloss')
         model.fit(X, y)
+        logger.info("머신러닝 모델 학습 완료.")
 
         latest_data = df_hourly_krw.iloc[-1:].copy()
         latest_data['fear_greed_score'] = fear_greed_index.get('value', 50)
@@ -379,6 +424,7 @@ def ai_trading():
 
         ml_prediction = model.predict(latest_X)[0]
         ml_decision = label_encoder.inverse_transform([ml_prediction])[0]
+        logger.info(f"머신러닝 모델 예측 결과: {ml_decision}")
     else:
         logger.info("머신러닝 모델을 학습하기에 충분한 데이터가 없습니다. OpenAI API의 결정을 기본값으로 사용합니다.")
         ml_decision = "hold"
@@ -408,30 +454,30 @@ def ai_trading():
                 "role": "system",
                 "content": f"""당신은 비트코인 투자 전문가입니다. 제공된 데이터를 분석하고, '워뇨띠'의 매매 전략을 참고하여 포트폴리오에서 비트코인의 **목표 비중(%)**을 결정하세요.
 
-                분석 시 고려해야 할 요소:
-                - USD 및 KRW 시장의 기술적 지표(RSI, MACD 등)
-                - USD와 KRW 간 환율
-                - USD 가격을 KRW로 환산한 값과 현재 KRW 가격 간의 괴리율
-                - 최근 뉴스 헤드라인과 그 영향
-                - 공포와 탐욕 지수의 의미
-                - 전체적인 시장 심리
-                - 최근 거래 성과 및 반성 내용
+분석 시 고려해야 할 요소:
+- USD 및 KRW 시장의 기술적 지표(RSI, MACD 등)
+- USD와 KRW 간 환율
+- USD 가격을 KRW로 환산한 값과 현재 KRW 가격 간의 괴리율
+- 최근 뉴스 헤드라인과 그 영향
+- 공포와 탐욕 지수의 의미
+- 전체적인 시장 심리
+- 최근 거래 성과 및 반성 내용
 
-                특히, 한국의 전설적인 투자자인 '워뇨띠'의 매매 방법을 항상 참고하여 현재 상황을 평가하고 거래 결정을 내려야 합니다. '워뇨띠'의 매매 방법은 다음과 같습니다:
-                {wonyyotti_strategy}
+특히, 한국의 전설적인 투자자인 '워뇨띠'의 매매 방법을 항상 참고하여 현재 상황을 평가하고 거래 결정을 내려야 합니다. '워뇨띠'의 매매 방법은 다음과 같습니다:
+{wonyyotti_strategy}
 
-                최근 거래 반성 내용:
-                {reflection}
+최근 거래 반성 내용:
+{reflection}
 
-                비트코인의 목표 비중은 0에서 100 사이의 값이어야 합니다.
+비트코인의 목표 비중은 0에서 100 사이의 값이어야 합니다.
 
-                응답 형식:
-                {{
-                    "target_btc_ratio": 비트코인 목표 비중 (%),
-                    "reason": "결정한 이유"
-                }}
+응답 형식:
+{{
+    "target_btc_ratio": 비트코인 목표 비중 (%),
+    "reason": "결정한 이유"
+}}
 
-                응답은 JSON 형식으로 제공해주세요."""
+응답은 JSON 형식으로 제공해주세요."""
             },
             {
                 "role": "user",
@@ -456,8 +502,9 @@ KRW-USD 프리미엄 (%): {premium_formatted}
         result = json.loads(result_content)
         openai_target_btc_ratio = result['target_btc_ratio']
         openai_reason = result['reason']
+        logger.info(f"OpenAI API 응답: {result}")
     except Exception as e:
-        logger.error(f"Error parsing OpenAI response: {e}")
+        logger.error(f"OpenAI API 응답 파싱 오류: {e}")
         openai_target_btc_ratio = 0  # 기본값 설정
         openai_reason = "OpenAI API 응답 오류로 인해 비트코인 비중을 0으로 설정"
 
@@ -471,13 +518,15 @@ KRW-USD 프리미엄 (%): {premium_formatted}
     total_asset = krw_balance + btc_balance * current_btc_price
     current_btc_ratio = (btc_balance * current_btc_price) / total_asset * 100 if total_asset > 0 else 0
 
-    # 머신러닝 모델과 OpenAI 모델의 목표 비중 평균을 사용
+    # 머신러닝 모델과 OpenAI 모델의 목표 비중 결합
     if ml_decision == "buy":
         final_target_btc_ratio = max(openai_target_btc_ratio, current_btc_ratio + 5)  # 최소 5% 이상 증가
     elif ml_decision == "sell":
         final_target_btc_ratio = min(openai_target_btc_ratio, current_btc_ratio - 5)  # 최소 5% 이상 감소
     else:
         final_target_btc_ratio = (openai_target_btc_ratio + current_btc_ratio) / 2
+
+    logger.info(f"최종 목표 비중: {final_target_btc_ratio:.2f}%, 현재 비중: {current_btc_ratio:.2f}%")
 
     # 목표 비중과 현재 비중의 차이 계산
     difference = final_target_btc_ratio - current_btc_ratio
@@ -488,26 +537,32 @@ KRW-USD 프리미엄 (%): {premium_formatted}
         # 매수 실행
         buy_amount_krw = total_asset * (difference / 100)
         if buy_amount_krw > 5000:
-            logger.info(f"### Buy Order Executed: {buy_amount_krw:.2f} KRW worth of BTC ###")
-            order = upbit.buy_market_order("KRW-BTC", buy_amount_krw)
-            if order:
-                order_executed = True
-            logger.info(order)
+            logger.info(f"### 매수 주문 실행: {buy_amount_krw:.2f} KRW 상당의 BTC ###")
+            try:
+                order = upbit.buy_market_order("KRW-BTC", buy_amount_krw)
+                if order:
+                    order_executed = True
+                    logger.info(f"매수 주문 성공: {order}")
+            except Exception as e:
+                logger.error(f"매수 주문 오류: {e}")
         else:
-            logger.info("### Buy Order Failed: Insufficient KRW amount ###")
+            logger.info("### 매수 주문 실패: KRW 금액 부족 ###")
     elif difference < 0:
         # 매도 실행
         sell_amount_btc = btc_balance * (-difference / current_btc_ratio)
         if sell_amount_btc * current_btc_price > 5000:
-            logger.info(f"### Sell Order Executed: {sell_amount_btc:.8f} BTC ###")
-            order = upbit.sell_market_order("KRW-BTC", sell_amount_btc)
-            if order:
-                order_executed = True
-            logger.info(order)
+            logger.info(f"### 매도 주문 실행: {sell_amount_btc:.8f} BTC ###")
+            try:
+                order = upbit.sell_market_order("KRW-BTC", sell_amount_btc)
+                if order:
+                    order_executed = True
+                    logger.info(f"매도 주문 성공: {order}")
+            except Exception as e:
+                logger.error(f"매도 주문 오류: {e}")
         else:
-            logger.info("### Sell Order Failed: Insufficient BTC amount ###")
+            logger.info("### 매도 주문 실패: BTC 금액 부족 ###")
     else:
-        logger.info("### Hold Position ###")
+        logger.info("### 포지션 유지 ###")
 
     # 거래 정보 로깅
     log_trade(
@@ -566,22 +621,29 @@ def generate_reflection(trades_df, current_market_data, wonyyotti_strategy):
         max_tokens=500,
         temperature=0.7,
     )
-    return response['choices'][0]['message']['content']
+    try:
+        reflection_content = response['choices'][0]['message']['content']
+        logger.info("거래 반성 내용 생성 완료.")
+        return reflection_content
+    except Exception as e:
+        logger.error(f"거래 반성 내용 생성 오류: {e}")
+        return "거래 반성 내용을 생성할 수 없습니다."
 
 def get_combined_transcript():
     try:
         with open("strategy.txt", "r", encoding="utf-8") as f:
             combined_text = f.read()
+        logger.info("전략 텍스트 파일 읽기 완료.")
         return combined_text
     except Exception as e:
-        logger.error(f"Error reading transcript from file: {e}")
+        logger.error(f"전략 텍스트 파일 읽기 오류: {e}")
         return ""
 
 def job():
     try:
         ai_trading()
     except Exception as e:
-        logger.error(f"An error occurred: {e}")
+        logger.error(f"트레이딩 실행 중 오류 발생: {e}")
 
 # def schedule_jobs():
 #     ny_timezone = pytz.timezone("America/New_York")
@@ -589,6 +651,7 @@ def job():
 #     schedule.every().day.at("08:00").do(job)
 #     schedule.every().day.at("16:00").do(job)
 
+#     logger.info("스케줄 작업이 설정되었습니다. 트레이딩 봇이 시작됩니다.")
 #     try:
 #         while True:
 #             schedule.run_pending()
