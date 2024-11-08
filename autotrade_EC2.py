@@ -445,6 +445,44 @@ def ai_trading():
     df_daily_usd.reset_index(inplace=True)
     df_hourly_usd.reset_index(inplace=True)
 
+    # 데이터 요약 함수 정의
+    def summarize_dataframe(df, num_rows=5):
+        if df.empty:
+            return {}
+        summary = df.describe().to_dict()
+        recent_data = df.tail(num_rows).to_dict(orient='records')
+        return {'summary': summary, 'recent_data': recent_data}
+    
+    # 데이터프레임 요약
+    df_daily_krw_summary = summarize_dataframe(df_daily_krw)
+    df_hourly_krw_summary = summarize_dataframe(df_hourly_krw)
+    df_daily_usd_summary = summarize_dataframe(df_daily_usd)
+    df_hourly_usd_summary = summarize_dataframe(df_hourly_usd)
+
+    # 기타 데이터들도 요약하거나 필요한 부분만 선택
+    filtered_balances_summary = filtered_balances  # 이미 작은 데이터이므로 그대로 사용
+    orderbook_summary = orderbook  # 필요한 정보만 포함하거나 요약
+
+    # OpenAI API를 사용하여 목표 비중 계산
+    openai.api_key = os.getenv("OPENAI_API_KEY")
+
+    # 최근 거래 내역 가져오기
+    recent_trades = get_recent_trades()
+    trades_data = convert_timestamps_in_data(recent_trades.to_dict(orient='records'))
+
+    # 현재 시장 데이터 수집
+    current_market_data = {
+        "fear_greed_index": fear_greed_index,
+        "news_headlines": news_headlines[:5],  # 최근 5개 뉴스만 포함
+        "orderbook": orderbook_summary,
+        "daily_ohlcv_krw": df_daily_krw_summary,
+        "hourly_ohlcv_krw": df_hourly_krw_summary,
+        "daily_ohlcv_usd": df_daily_usd_summary,
+        "hourly_ohlcv_usd": df_hourly_usd_summary,
+        "usd_krw_rate": usd_krw_rate,
+        "krw_usd_premium": premium,
+    }
+
     # DataFrames를 dict로 변환하고 Timestamp를 문자열로 변환
     df_daily_krw_data = convert_timestamps_in_data(df_daily_krw.to_dict(orient='records'))
     df_hourly_krw_data = convert_timestamps_in_data(df_hourly_krw.to_dict(orient='records'))
@@ -478,12 +516,6 @@ def ai_trading():
     current_market_data = convert_timestamps_in_data(current_market_data)
 
     reflection = generate_reflection(recent_trades, current_market_data, wonyyotti_strategy)
-
-    # 최근 5개의 데이터만 사용
-    df_daily_krw_recent = df_daily_krw.tail(5).to_dict(orient='records')
-    df_hourly_krw_recent = df_hourly_krw.tail(5).to_dict(orient='records')
-    df_daily_usd_recent = df_daily_usd.tail(5).to_dict(orient='records')
-    df_hourly_usd_recent = df_hourly_usd.tail(5).to_dict(orient='records')
 
     response = openai.ChatCompletion.create(
         model="gpt-4o-2024-08-06",
@@ -520,14 +552,14 @@ def ai_trading():
             {
                 "role": "user",
                 "content": f"""현재 투자 현황: {json.dumps(filtered_balances)}
-주문장: {json.dumps(orderbook)}
-KRW 일간 OHLCV 지표 (최근 5일): {json.dumps(df_daily_krw_recent)}
-KRW 시간별 OHLCV 지표 (최근 5시간): {json.dumps(df_hourly_krw_recent)}
-USD 일간 OHLCV 지표 (최근 5일): {json.dumps(df_daily_usd_recent)}
-USD 시간별 OHLCV 지표 (최근 5시간): {json.dumps(df_hourly_usd_recent)}
+주문장 요약: {json.dumps(orderbook_summary)}
+KRW 일간 OHLCV 지표 요약 (30일): {json.dumps(df_daily_krw_summary)}
+KRW 시간별 OHLCV 지표 요약 (24시간): {json.dumps(df_hourly_krw_summary)}
+USD 일간 OHLCV 지표 요약 (30일): {json.dumps(df_daily_usd_summary)}
+USD 시간별 OHLCV 지표 요약 (24시간): {json.dumps(df_hourly_usd_summary)}
 USD/KRW 환율: {usd_krw_rate}
 KRW-USD 프리미엄 (%): {premium_formatted}
-최근 뉴스 헤드라인: {json.dumps(news_headlines)}
+최근 뉴스 헤드라인: {json.dumps(news_headlines[:5])}
 공포와 탐욕 지수: {json.dumps(fear_greed_index)}"""
             }
         ],
