@@ -479,6 +479,18 @@ def ai_trading():
 
     reflection = generate_reflection(recent_trades, current_market_data, wonyyotti_strategy)
 
+    # 데이터 요약 함수 정의
+    def summarize_dataframe(df, num_rows=5):
+        summary = df.describe().to_dict()
+        recent_data = df.tail(num_rows).to_dict(orient='records')
+        return {'summary': summary, 'recent_data': recent_data}
+
+    # 데이터프레임 요약
+    df_daily_krw_summary = summarize_dataframe(df_daily_krw)
+    df_hourly_krw_summary = summarize_dataframe(df_hourly_krw)
+    df_daily_usd_summary = summarize_dataframe(df_daily_usd)
+    df_hourly_usd_summary = summarize_dataframe(df_hourly_usd)
+
     response = openai.ChatCompletion.create(
         model="gpt-4o-2024-08-06",
         messages=[
@@ -515,10 +527,10 @@ def ai_trading():
                 "role": "user",
                 "content": f"""현재 투자 현황: {json.dumps(filtered_balances)}
 주문장: {json.dumps(orderbook)}
-KRW 일간 OHLCV 지표 (30일): {json.dumps(df_daily_krw_data)}
-KRW 시간별 OHLCV 지표 (24시간): {json.dumps(df_hourly_krw_data)}
-USD 일간 OHLCV 지표 (30일): {json.dumps(df_daily_usd_data)}
-USD 시간별 OHLCV 지표 (24시간): {json.dumps(df_hourly_usd_data)}
+KRW 일간 OHLCV 지표 요약: {json.dumps(df_daily_krw_summary)}
+KRW 시간별 OHLCV 지표 요약: {json.dumps(df_hourly_krw_summary)}
+USD 일간 OHLCV 지표 요약: {json.dumps(df_daily_usd_summary)}
+USD 시간별 OHLCV 지표 요약: {json.dumps(df_hourly_usd_summary)}
 USD/KRW 환율: {usd_krw_rate}
 KRW-USD 프리미엄 (%): {premium_formatted}
 최근 뉴스 헤드라인: {json.dumps(news_headlines)}
