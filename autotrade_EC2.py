@@ -394,11 +394,17 @@ def get_btc_balance():
     return btc_balance
 
 def execute_buy_order(amount):
-    # 분할 매수를 실행하는 함수
+    # 손절매 및 이익 실현 가격 설정
+    current_price = pyupbit.get_current_price("KRW-BTC")
+    stop_loss_price = current_price * 0.90  # 10% 손절
+    take_profit_price = current_price * 1.10  # 10% 이익 실현
+
     if amount > 5000:
         order = upbit.buy_market_order("KRW-BTC", amount)
         logger.info(f"매수 주문 실행: {amount} KRW")
-        # send_alert(f"매수 주문 실행: {amount} KRW")
+        # 손절매 및 이익 실현 주문 설정 (업비트는 지원하지 않으므로 수동 구현 필요)
+        # 매수 후 손절매 및 이익 실현 모니터링 시작
+        monitor_position(stop_loss_price, take_profit_price, amount)
         return order
     else:
         logger.info("매수 금액이 최소 주문 금액보다 적습니다.")
@@ -410,20 +416,11 @@ def execute_sell_order(amount):
     if amount * current_price > 5000:
         order = upbit.sell_market_order("KRW-BTC", amount)
         logger.info(f"매도 주문 실행: {amount} BTC")
-        # send_alert(f"매도 주문 실행: {amount} BTC")
+        send_alert(f"매도 주문 실행: {amount} BTC")
         return order
     else:
         logger.info("매도 금액이 최소 주문 금액보다 적습니다.")
         return None
-
-def update_resistance_support(current_price, resistance, support, breakout_margin=0.01):
-    if current_price > resistance * (1 + breakout_margin):
-        # 강한 상승 돌파, 저항선 업데이트
-        resistance = current_price
-    elif current_price < support * (1 - breakout_margin):
-        # 강한 하락 돌파, 지지선 업데이트
-        support = current_price
-    return resistance, support
 
 def calculate_trade_amount(balance, risk_percentage):
     # 잔고의 일정 비율을 매매 금액으로 사용
@@ -449,23 +446,6 @@ def monitor_position(stop_loss_price, take_profit_price, amount):
         # 1초 대기 후 다시 확인 (가격을 실시간으로 모니터링)
         time.sleep(1)
 
-def execute_buy_order(amount):
-    # 손절매 및 이익 실현 가격 설정
-    current_price = pyupbit.get_current_price("KRW-BTC")
-    stop_loss_price = current_price * 0.90  # 10% 손절
-    take_profit_price = current_price * 1.10  # 10% 이익 실현
-
-    if amount > 5000:
-        order = upbit.buy_market_order("KRW-BTC", amount)
-        logger.info(f"매수 주문 실행: {amount} KRW")
-        # 손절매 및 이익 실현 주문 설정 (업비트는 지원하지 않으므로 수동 구현 필요)
-        # 매수 후 손절매 및 이익 실현 모니터링 시작
-        monitor_position(stop_loss_price, take_profit_price, amount)
-        return order
-    else:
-        logger.info("매수 금액이 최소 주문 금액보다 적습니다.")
-        return None
-    
 def is_buy_signal(current_rsi, macd, macd_signal):
     return current_rsi < 30 and macd > macd_signal
 
@@ -650,8 +630,7 @@ def ai_trading():
     buy_count = 0
     sell_count = 0
 
-    # 실시간 가격 모니터링 스레드 시작
-    loop = asyncio.new_event_loop()
+    # 실시간 가격 모니터링 스레드 시작 (한 번만 실행)
     threading.Thread(target=lambda: asyncio.run(real_time_price_monitoring(resistance, support))).start()
 
     # RSI 및 MACD 기반 매매 신호 확인
@@ -668,9 +647,6 @@ def ai_trading():
         btc_balance = get_btc_balance()
         trade_amount = calculate_trade_amount(btc_balance * current_price, risk_percentage=5)
         execute_sell_order(trade_amount / current_price)
-
-    # 실시간 가격 모니터링 시작
-    threading.Thread(target=lambda: asyncio.run(real_time_price_monitoring(resistance, support))).start()
 
     # DataFrame을 JSON으로 변환
     df_daily_krw_json = df_daily_krw.to_json(orient='records')
@@ -870,44 +846,6 @@ def job():
     except Exception as e:
         logger.error(f"An error occurred: {e}")
 
-# if __name__ == "__main__":
-#     # 로깅 설정
-#     logging.basicConfig(level=logging.INFO)
-#     logger = logging.getLogger(__name__)
-
-#     load_dotenv()
-
-#     # 데이터베이스 초기화
-#     init_db()
-
-#     # # 테스트용 바로 실행
-#     # job()
-
-#     # # 매일 특정 시간에 실행
-#     # schedule.every().day.at("00:00").do(job)
-#     # schedule.every().day.at("04:00").do(job)
-#     # schedule.every().day.at("08:00").do(job)
-#     # schedule.every().day.at("12:00").do(job)
-#     # schedule.every().day.at("16:00").do(job)
-#     # schedule.every().day.at("20:00").do(job)
-
-#     while True:
-#         schedule.run_pending()
-#         time.sleep(1)
-
-# def schedule_jobs():
-#     ny_timezone = pytz.timezone("America/New_York")
-#     schedule.every().day.at("00:00").do(job)
-#     schedule.every().day.at("08:00").do(job)
-#     schedule.every().day.at("16:00").do(job)
-
-#     try:
-#         while True:
-#             schedule.run_pending()
-#             time.sleep(1)
-#     except KeyboardInterrupt:
-#         logger.info("스케줄 작업이 중단되었습니다.")
-
 if __name__ == "__main__":
     # 로깅 설정
     logging.basicConfig(level=logging.INFO)
@@ -922,4 +860,5 @@ if __name__ == "__main__":
     logger.info("스케줄 작업을 시작합니다.")
     # schedule_jobs()
 
-job()
+    # 테스트용 바로 실행
+    job()
