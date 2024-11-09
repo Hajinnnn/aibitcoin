@@ -28,6 +28,14 @@ from pydantic import BaseModel
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import ccxt
 import pytz
+import asyncio
+import websockets
+import threading
+
+# Upbit 객체를 전역에서 생성
+access = os.getenv("UPBIT_ACCESS_KEY")
+secret = os.getenv("UPBIT_SECRET_KEY")
+upbit = pyupbit.Upbit(access, secret)
 
 class PortfolioAllocation(BaseModel):
     target_btc_ratio: float
@@ -348,11 +356,105 @@ def get_combined_transcript():
         logger.error(f"Error reading transcript from file: {e}")
         return ""
 
+# def send_alert(message):
+#     # 알림을 발송하는 함수 (예: 텔레그램)
+#     telegram_token = os.getenv("TELEGRAM_BOT_TOKEN")
+#     telegram_chat_id = os.getenv("TELEGRAM_CHAT_ID")
+#     url = f"https://api.telegram.org/bot{telegram_token}/sendMessage"
+#     params = {
+#         'chat_id': telegram_chat_id,
+#         'text': message
+#     }
+#     try:
+#         requests.get(url, params=params)
+#         logger.info("알림 발송 성공")
+#     except Exception as e:
+#         logger.error(f"알림 발송 실패: {e}")
+
+def calculate_support_resistance(df):
+    # 저항선과 지지선을 계산 (USD 차트를 기준으로)
+    n = 20  # 최근 20개의 봉을 사용
+    recent_high = df['high'].rolling(window=n).max()
+    recent_low = df['low'].rolling(window=n).min()
+    return recent_high.iloc[-1], recent_low.iloc[-1]
+
+def get_krw_balance():
+    # KRW 잔액 조회
+    balances = upbit.get_balances()
+    krw_balance = next((float(balance['balance']) for balance in balances if balance['currency'] == 'KRW'), 0)
+    return krw_balance
+
+def get_btc_balance():
+    # BTC 잔액 조회
+    balances = upbit.get_balances()
+    btc_balance = next((float(balance['balance']) for balance in balances if balance['currency'] == 'BTC'), 0)
+    return btc_balance
+
+def execute_buy_order(amount):
+    # 분할 매수를 실행하는 함수
+    if amount > 5000:
+        order = upbit.buy_market_order("KRW-BTC", amount)
+        logger.info(f"매수 주문 실행: {amount} KRW")
+        # send_alert(f"매수 주문 실행: {amount} KRW")
+        return order
+    else:
+        logger.info("매수 금액이 최소 주문 금액보다 적습니다.")
+        return None
+
+def execute_sell_order(amount):
+    # 분할 매도를 실행하는 함수
+    current_price = pyupbit.get_current_price("KRW-BTC")
+    if amount * current_price > 5000:
+        order = upbit.sell_market_order("KRW-BTC", amount)
+        logger.info(f"매도 주문 실행: {amount} BTC")
+        # send_alert(f"매도 주문 실행: {amount} BTC")
+        return order
+    else:
+        logger.info("매도 금액이 최소 주문 금액보다 적습니다.")
+        return None
+
+async def real_time_price_monitoring(resistance, support):
+    # 실시간 가격 모니터링하여 저항선 돌파 및 지지선 붕괴 시 매매 실행
+    uri = "wss://api.upbit.com/websocket/v1"
+    async with websockets.connect(uri) as websocket:
+        subscribe_data = [
+            {"ticket": "test"},
+            {"type": "ticker", "codes": ["KRW-BTC"]},
+            {"format": "SIMPLE"}
+        ]
+        await websocket.send(json.dumps(subscribe_data))
+        
+        # 분할 매매를 위한 카운터 초기화
+        buy_count = 0
+        sell_count = 0
+        
+        while True:
+            data = await websocket.recv()
+            data = json.loads(data)
+            current_price = data['tp']  # trade_price
+            print(f"현재 가격: {current_price}")
+            
+            # 저항선 돌파 시 분할 매수 (최대 3회)
+            if current_price > resistance and buy_count < 3:
+                krw_balance = get_krw_balance()
+                buy_amount = (krw_balance * 0.1) / (3 - buy_count)  # 남은 횟수만큼 분할
+                order = execute_buy_order(buy_amount)
+                if order:
+                    buy_count += 1
+                resistance = current_price  # 새로운 저항선 설정
+
+            # 지지선 붕괴 시 분할 매도 (최대 3회)
+            elif current_price < support and sell_count < 3:
+                btc_balance = get_btc_balance()
+                sell_amount = (btc_balance * 0.1) / (3 - sell_count)  # 남은 횟수만큼 분할
+                order = execute_sell_order(sell_amount)
+                if order:
+                    sell_count += 1
+                support = current_price  # 새로운 지지선 설정
+
+            await asyncio.sleep(0.1)  # 0.1초마다 체크
+
 def ai_trading():
-    # Upbit 객체 생성
-    access = os.getenv("UPBIT_ACCESS_KEY")
-    secret = os.getenv("UPBIT_SECRET_KEY")
-    upbit = pyupbit.Upbit(access, secret)
 
     # Wonnyotti의 전략 가져오기
     wonyyotti_strategy = get_combined_transcript()  # strategy.txt에서 내용 가져오기
@@ -406,7 +508,7 @@ def ai_trading():
         except Exception as e:
             logger.error(f"Error fetching USD hourly OHLCV data: {e}")
             return pd.DataFrame()
-
+        
     def fetch_fear_and_greed():
         return get_fear_and_greed_index()
 
@@ -468,7 +570,8 @@ def ai_trading():
     df_hourly_usd = results.get('hourly_usd_ohlcv', pd.DataFrame())
     fear_greed_index = results.get('fear_greed', {})
     news_headlines = results.get('news', [])
-    youtube_transcript = results.get('transcript', "")
+    # youtube_transcript = results.get('transcript', "")
+    wonyyotti_strategy = results.get('transcript', "")
     chart_image = results.get('chart_image', None)
     usd_krw_rate = results.get('usd_krw_rate', None)
 
@@ -480,6 +583,43 @@ def ai_trading():
     df_hourly_krw = select_columns(df_hourly_krw)
     df_daily_usd = select_columns(df_daily_usd)
     df_hourly_usd = select_columns(df_hourly_usd)
+
+     # 저항선과 지지선을 USD 차트를 기반으로 계산
+    if df_hourly_usd.empty:
+        logger.error("시간봉 USD 데이터가 없습니다.")
+        return
+
+    resistance, support = calculate_support_resistance(df_hourly_usd)
+
+     # RSI를 사용하여 과매수/과매도 상태 판단
+    overbought_rsi_threshold = 70
+    oversold_rsi_threshold = 30
+    current_rsi = df_hourly_usd['rsi'].iloc[-1]
+
+    # 분할 매매를 위한 카운터 초기화
+    buy_count = 0
+    sell_count = 0
+
+    # 실시간 가격 모니터링 스레드 시작
+    loop = asyncio.new_event_loop()
+    threading.Thread(target=loop.run_until_complete, args=(real_time_price_monitoring(resistance, support),)).start()
+
+    # RSI 기반 분할 매매 실행
+    if current_rsi <= oversold_rsi_threshold and buy_count < 3:
+        # 저점 신호 포착, 분할 매수 실행
+        krw_balance = get_krw_balance()
+        buy_amount = (krw_balance * 0.1) / (3 - buy_count)
+        order = execute_buy_order(buy_amount)
+        if order:
+            buy_count += 1
+
+    if current_rsi >= overbought_rsi_threshold and sell_count < 3:
+        # 고점 신호 포착, 분할 매도 실행
+        btc_balance = get_btc_balance()
+        sell_amount = (btc_balance * 0.1) / (3 - sell_count)
+        order = execute_sell_order(sell_amount)
+        if order:
+            sell_count += 1
 
     # DataFrame을 JSON으로 변환
     df_daily_krw_json = df_daily_krw.to_json(orient='records')
@@ -731,4 +871,4 @@ if __name__ == "__main__":
     logger.info("스케줄 작업을 시작합니다.")
     # schedule_jobs()
 
-    job()
+job()
