@@ -602,7 +602,7 @@ def ai_trading():
 
     # 실시간 가격 모니터링 스레드 시작
     loop = asyncio.new_event_loop()
-    threading.Thread(target=loop.run_until_complete, args=(real_time_price_monitoring(resistance, support),)).start()
+    threading.Thread(target=lambda: asyncio.run(real_time_price_monitoring(resistance, support))).start()
 
     # RSI 기반 분할 매매 실행
     if current_rsi <= oversold_rsi_threshold and buy_count < 3:
