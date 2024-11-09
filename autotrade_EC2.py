@@ -32,6 +32,9 @@ import asyncio
 import websockets
 import threading
 
+# 환경 변수 로드
+load_dotenv()
+
 # Upbit 객체를 전역에서 생성
 access = os.getenv("UPBIT_ACCESS_KEY")
 secret = os.getenv("UPBIT_SECRET_KEY")
@@ -413,6 +416,62 @@ def execute_sell_order(amount):
         logger.info("매도 금액이 최소 주문 금액보다 적습니다.")
         return None
 
+def update_resistance_support(current_price, resistance, support, breakout_margin=0.01):
+    if current_price > resistance * (1 + breakout_margin):
+        # 강한 상승 돌파, 저항선 업데이트
+        resistance = current_price
+    elif current_price < support * (1 - breakout_margin):
+        # 강한 하락 돌파, 지지선 업데이트
+        support = current_price
+    return resistance, support
+
+def calculate_trade_amount(balance, risk_percentage):
+    # 잔고의 일정 비율을 매매 금액으로 사용
+    return balance * (risk_percentage / 100)
+
+def monitor_position(stop_loss_price, take_profit_price, amount):
+    while True:
+        # 현재 가격을 실시간으로 가져오기
+        current_price = pyupbit.get_current_price("KRW-BTC")
+        
+        # 손절매 조건: 현재 가격이 손절 가격 이하로 떨어질 경우
+        if current_price <= stop_loss_price:
+            order = upbit.sell_market_order("KRW-BTC", amount)
+            logger.info(f"손절매 주문 실행: {amount} BTC @ {current_price} KRW")
+            break  # 손절매 후 모니터링 종료
+        
+        # 이익 실현 조건: 현재 가격이 목표 가격 이상으로 상승할 경우
+        elif current_price >= take_profit_price:
+            order = upbit.sell_market_order("KRW-BTC", amount)
+            logger.info(f"이익 실현 주문 실행: {amount} BTC @ {current_price} KRW")
+            break  # 이익 실현 후 모니터링 종료
+        
+        # 1초 대기 후 다시 확인 (가격을 실시간으로 모니터링)
+        time.sleep(1)
+
+def execute_buy_order(amount):
+    # 손절매 및 이익 실현 가격 설정
+    current_price = pyupbit.get_current_price("KRW-BTC")
+    stop_loss_price = current_price * 0.90  # 10% 손절
+    take_profit_price = current_price * 1.10  # 10% 이익 실현
+
+    if amount > 5000:
+        order = upbit.buy_market_order("KRW-BTC", amount)
+        logger.info(f"매수 주문 실행: {amount} KRW")
+        # 손절매 및 이익 실현 주문 설정 (업비트는 지원하지 않으므로 수동 구현 필요)
+        # 매수 후 손절매 및 이익 실현 모니터링 시작
+        monitor_position(stop_loss_price, take_profit_price, amount)
+        return order
+    else:
+        logger.info("매수 금액이 최소 주문 금액보다 적습니다.")
+        return None
+    
+def is_buy_signal(current_rsi, macd, macd_signal):
+    return current_rsi < 30 and macd > macd_signal
+
+def is_sell_signal(current_rsi, macd, macd_signal):
+    return current_rsi > 70 and macd < macd_signal
+
 async def real_time_price_monitoring(resistance, support):
     # 실시간 가격 모니터링하여 저항선 돌파 및 지지선 붕괴 시 매매 실행
     uri = "wss://api.upbit.com/websocket/v1"
@@ -424,35 +483,26 @@ async def real_time_price_monitoring(resistance, support):
         ]
         await websocket.send(json.dumps(subscribe_data))
         
-        # 분할 매매를 위한 카운터 초기화
-        buy_count = 0
-        sell_count = 0
-        
         while True:
             data = await websocket.recv()
             data = json.loads(data)
-            current_price = data['tp']  # trade_price
+            current_price = data['tp']
             print(f"현재 가격: {current_price}")
-            
-            # 저항선 돌파 시 분할 매수 (최대 3회)
-            if current_price > resistance and buy_count < 3:
+
+            # 저항선 및 지지선 업데이트
+            resistance, support = update_resistance_support(current_price, resistance, support)
+
+            # 매매 신호 확인
+            if current_price > resistance:
                 krw_balance = get_krw_balance()
-                buy_amount = (krw_balance * 0.1) / (3 - buy_count)  # 남은 횟수만큼 분할
-                order = execute_buy_order(buy_amount)
-                if order:
-                    buy_count += 1
-                resistance = current_price  # 새로운 저항선 설정
-
-            # 지지선 붕괴 시 분할 매도 (최대 3회)
-            elif current_price < support and sell_count < 3:
+                trade_amount = calculate_trade_amount(krw_balance, risk_percentage=5)
+                execute_buy_order(trade_amount)
+            elif current_price < support:
                 btc_balance = get_btc_balance()
-                sell_amount = (btc_balance * 0.1) / (3 - sell_count)  # 남은 횟수만큼 분할
-                order = execute_sell_order(sell_amount)
-                if order:
-                    sell_count += 1
-                support = current_price  # 새로운 지지선 설정
+                trade_amount = calculate_trade_amount(btc_balance * current_price, risk_percentage=5)
+                execute_sell_order(trade_amount / current_price)
 
-            await asyncio.sleep(0.1)  # 0.1초마다 체크
+            await asyncio.sleep(0.1)  # 0.1초마다 체크 
 
 def ai_trading():
 
@@ -604,22 +654,22 @@ def ai_trading():
     loop = asyncio.new_event_loop()
     threading.Thread(target=lambda: asyncio.run(real_time_price_monitoring(resistance, support))).start()
 
-    # RSI 기반 분할 매매 실행
-    if current_rsi <= oversold_rsi_threshold and buy_count < 3:
-        # 저점 신호 포착, 분할 매수 실행
-        krw_balance = get_krw_balance()
-        buy_amount = (krw_balance * 0.1) / (3 - buy_count)
-        order = execute_buy_order(buy_amount)
-        if order:
-            buy_count += 1
+    # RSI 및 MACD 기반 매매 신호 확인
+    current_rsi = df_hourly_usd['rsi'].iloc[-1]
+    macd = df_hourly_usd['macd'].iloc[-1]
+    macd_signal = df_hourly_usd['macd_signal'].iloc[-1]
 
-    if current_rsi >= overbought_rsi_threshold and sell_count < 3:
-        # 고점 신호 포착, 분할 매도 실행
+    if is_buy_signal(current_rsi, macd, macd_signal):
+        krw_balance = get_krw_balance()
+        trade_amount = calculate_trade_amount(krw_balance, risk_percentage=5)
+        execute_buy_order(trade_amount)
+    elif is_sell_signal(current_rsi, macd, macd_signal):
         btc_balance = get_btc_balance()
-        sell_amount = (btc_balance * 0.1) / (3 - sell_count)
-        order = execute_sell_order(sell_amount)
-        if order:
-            sell_count += 1
+        trade_amount = calculate_trade_amount(btc_balance * current_price, risk_percentage=5)
+        execute_sell_order(trade_amount / current_price)
+
+    # 실시간 가격 모니터링 시작
+    threading.Thread(target=lambda: asyncio.run(real_time_price_monitoring(resistance, support))).start()
 
     # DataFrame을 JSON으로 변환
     df_daily_krw_json = df_daily_krw.to_json(orient='records')
