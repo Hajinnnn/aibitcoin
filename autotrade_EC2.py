@@ -359,20 +359,20 @@ def get_combined_transcript():
         logger.error(f"Error reading transcript from file: {e}")
         return ""
 
-# def send_alert(message):
-#     # 알림을 발송하는 함수 (예: 텔레그램)
-#     telegram_token = os.getenv("TELEGRAM_BOT_TOKEN")
-#     telegram_chat_id = os.getenv("TELEGRAM_CHAT_ID")
-#     url = f"https://api.telegram.org/bot{telegram_token}/sendMessage"
-#     params = {
-#         'chat_id': telegram_chat_id,
-#         'text': message
-#     }
-#     try:
-#         requests.get(url, params=params)
-#         logger.info("알림 발송 성공")
-#     except Exception as e:
-#         logger.error(f"알림 발송 실패: {e}")
+def send_alert(message):
+    # 알림을 발송하는 함수 (예: 텔레그램)
+    telegram_token = os.getenv("TELEGRAM_BOT_TOKEN")
+    telegram_chat_id = os.getenv("TELEGRAM_CHAT_ID")
+    url = f"https://api.telegram.org/bot{telegram_token}/sendMessage"
+    params = {
+        'chat_id': telegram_chat_id,
+        'text': message
+    }
+    try:
+        requests.get(url, params=params)
+        logger.info("알림 발송 성공")
+    except Exception as e:
+        logger.error(f"알림 발송 실패: {e}")
 
 def calculate_support_resistance(df):
     # 저항선과 지지선을 계산 (USD 차트를 기준으로)
@@ -658,6 +658,7 @@ def ai_trading():
     current_rsi = df_hourly_usd['rsi'].iloc[-1]
     macd = df_hourly_usd['macd'].iloc[-1]
     macd_signal = df_hourly_usd['macd_signal'].iloc[-1]
+    current_price = pyupbit.get_current_price("KRW-BTC")
 
     if is_buy_signal(current_rsi, macd, macd_signal):
         krw_balance = get_krw_balance()
