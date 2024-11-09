@@ -17,6 +17,4 @@ optuna
 xgboost
 scikit-learn
 numpy
-asyncio
 websockets
-threading
