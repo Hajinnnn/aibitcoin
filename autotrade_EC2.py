@@ -114,6 +114,17 @@ def calculate_performance(trades_df):
 def generate_reflection(trades_df, current_market_data, wonyyotti_strategy):
     performance = calculate_performance(trades_df)
 
+    # 최근 거래 내역 요약
+    recent_trades_summary = trades_df.describe().to_dict()
+    
+    # 시장 데이터 요약
+    market_summary = {
+        "current_price": current_market_data.get("current_price"),
+        "volume": current_market_data.get("volume"),
+        "fear_greed_index": current_market_data.get("fear_greed_index"),
+        # 필요한 다른 핵심 정보 추가
+    }
+
     client = OpenAI()
     response = client.chat.completions.create(
     model="gpt-4o-2024-08-06",
@@ -129,10 +140,10 @@ def generate_reflection(trades_df, current_market_data, wonyyotti_strategy):
             "role": "user",
             "content": f"""
                 Recent trading data:
-                {trades_df.to_json(orient='records')}
+                {json.dumps(recent_trades_summary, indent=2)}
 
                 Current market data:
-                {current_market_data}
+                {json.dumps(market_summary, indent=2)}
 
                 Overall performance in the last 7 days: {performance:.2f}%
 
