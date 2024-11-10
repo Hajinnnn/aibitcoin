@@ -470,7 +470,7 @@ def is_sell_signal(df):
     macd_signal = df['macd_signal'].iloc[-1]
     return current_rsi > 70 and macd < macd_signal
 
-async def real_time_price_monitoring(resistance, support):
+async def real_time_price_monitoring(resistance, support, stop_event):
     # 실시간 가격 모니터링하여 저항선 돌파 및 지지선 붕괴 시 매매 실행
     uri = "wss://api.upbit.com/websocket/v1"
     async with websockets.connect(uri) as websocket:
