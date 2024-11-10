@@ -470,6 +470,8 @@ def is_sell_signal(df):
     macd_signal = df['macd_signal'].iloc[-1]
     return current_rsi > 70 and macd < macd_signal
 
+import time
+
 async def real_time_price_monitoring(resistance, support, stop_event):
     # 실시간 가격 모니터링하여 저항선 돌파 및 지지선 붕괴 시 매매 실행
     uri = "wss://api.upbit.com/websocket/v1"
@@ -485,45 +487,64 @@ async def real_time_price_monitoring(resistance, support, stop_event):
         price_history = []
         max_history_length = 100  # 최대 저장할 가격 데이터 수
 
+        # 최초 저항선과 지지선 출력
+        print(f"최초 저항선: {resistance}, 최초 지지선: {support}")
+
+        # 10분 타이머 초기화
+        last_print_time = time.time()
+
         while not stop_event.is_set():
             data = await websocket.recv()
             data = json.loads(data)
             current_price = data['tp']
-            print(f"현재 가격: {current_price}")
+            
+            # 10분 간격으로 현재 가격 출력
+            current_time = time.time()
+            if current_time - last_print_time >= 600:  # 600초 = 10분
+                print(f"현재 가격: {current_price}")
+                last_print_time = current_time
 
             # 가격 히스토리 업데이트
-            price_history.append(current_price)
+            price_data = {
+                'open': current_price,
+                'high': current_price,
+                'low': current_price,
+                'close': current_price,
+                'volume': 1  # 예시 볼륨 값
+            }
+            price_history.append(price_data)
             if len(price_history) > max_history_length:
                 price_history.pop(0)
             
-            # 지지선/저항선 업데이트
-            resistance, support = update_resistance_support(current_price, resistance, support)
-            print(f"현재 저항선: {resistance}, 현재 지지선: {support}")
+            # DataFrame 생성 및 지표 추가
+            df = pd.DataFrame(price_history)
+            df = add_indicators(df)
 
-            # 매매 신호 확인 (기술 지표 기반)
-            if len(price_history) >= 20:  # 볼린저 밴드, MACD 등의 지표 계산을 위해 최소 20개 이상의 데이터 필요
-                df = pd.DataFrame({'close': price_history})
-                df = add_indicators(df)
-                
-                # 지표 상태 출력
-                print(f"현재 RSI: {df['rsi'].iloc[-1]}")
-                print(f"현재 MACD: {df['macd'].iloc[-1]}, Signal: {df['macd_signal'].iloc[-1]}")
-                print(f"볼린저 밴드 상단: {df['bb_bbh'].iloc[-1]}, 중간: {df['bb_bbm'].iloc[-1]}, 하단: {df['bb_bbl'].iloc[-1]}")
+            # 지표 출력
+            print(f"현재 RSI: {df['rsi'].iloc[-1]}")
+            print(f"현재 MACD: {df['macd'].iloc[-1]}, Signal: {df['macd_signal'].iloc[-1]}")
+            print(f"볼린저 밴드 상단: {df['bb_bbh'].iloc[-1]}, 중간: {df['bb_bbm'].iloc[-1]}, 하단: {df['bb_bbl'].iloc[-1]}")
 
-                # 매매 신호에 따른 매수/매도
-                if is_buy_signal(df):
-                    krw_balance = get_krw_balance()
-                    trade_amount = calculate_trade_amount(krw_balance, risk_percentage=5)
-                    execute_buy_order(trade_amount)
-                    print("매수 신호에 따라 매수를 실행합니다.")
-                elif is_sell_signal(df):
-                    btc_balance = get_btc_balance()
-                    trade_amount = calculate_trade_amount(btc_balance * current_price, risk_percentage=5)
-                    execute_sell_order(trade_amount / current_price)
-                    print("매도 신호에 따라 매도를 실행합니다.")
-            
-            # 주기적으로 상태 확인
-            await asyncio.sleep(1)  # 1초마다 체크 
+            # 저항선 및 지지선 업데이트 후 변경 여부 확인
+            new_resistance, new_support = update_resistance_support(current_price, resistance, support)
+            if new_resistance != resistance or new_support != support:
+                print(f"**저항선이 업데이트되었습니다: {new_resistance}**" if new_resistance != resistance else "")
+                print(f"**지지선이 업데이트되었습니다: {new_support}**" if new_support != support else "")
+                resistance, support = new_resistance, new_support
+
+            # 매매 신호 확인
+            if is_buy_signal(df):
+                krw_balance = get_krw_balance()
+                trade_amount = calculate_trade_amount(krw_balance, risk_percentage=5)
+                execute_buy_order(trade_amount)
+                print("매수 신호에 따라 매수를 실행합니다.")
+            elif is_sell_signal(df):
+                btc_balance = get_btc_balance()
+                trade_amount = calculate_trade_amount(btc_balance * current_price, risk_percentage=5)
+                execute_sell_order(trade_amount / current_price)
+                print("매도 신호에 따라 매도를 실행합니다.")
+
+            await asyncio.sleep(1)  # 1초마다 체크  
 
 def start_real_time_monitoring(resistance, support, stop_event):
     asyncio.run(real_time_price_monitoring(resistance, support, stop_event))
