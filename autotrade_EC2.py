@@ -550,12 +550,15 @@ async def real_time_price_monitoring(resistance, support, stop_event):
                         trade_amount = calculate_trade_amount(krw_balance, risk_percentage=10)
                         execute_buy_order(trade_amount)
                         resistance = new_resistance
+                        print(f"업데이트된 저항선: {resistance}")
+
                     elif current_price < support:  # 지지선 붕괴 시 매도
                         print("지지선 붕괴: 매도 주문을 실행합니다.")
                         btc_balance = get_btc_balance()
                         trade_amount = calculate_trade_amount(btc_balance * current_price, risk_percentage=10)
                         execute_sell_order(trade_amount / current_price)
                         support = new_support
+                        print(f"업데이트된 지지선: {support}")
 
                     # 매매 신호 확인
                     if is_buy_signal(df):
