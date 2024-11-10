@@ -28,17 +28,6 @@ from pydantic import BaseModel
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import ccxt
 import pytz
-import asyncio
-import websockets
-import threading
-
-# 환경 변수 로드
-load_dotenv()
-
-# Upbit 객체를 전역에서 생성
-access = os.getenv("UPBIT_ACCESS_KEY")
-secret = os.getenv("UPBIT_SECRET_KEY")
-upbit = pyupbit.Upbit(access, secret)
 
 class PortfolioAllocation(BaseModel):
     target_btc_ratio: float
@@ -114,17 +103,6 @@ def calculate_performance(trades_df):
 def generate_reflection(trades_df, current_market_data, wonyyotti_strategy):
     performance = calculate_performance(trades_df)
 
-    # 최근 거래 내역 요약
-    recent_trades_summary = trades_df.describe().to_dict()
-    
-    # 시장 데이터 요약
-    market_summary = {
-        "current_price": current_market_data.get("current_price"),
-        "volume": current_market_data.get("volume"),
-        "fear_greed_index": current_market_data.get("fear_greed_index"),
-        # 필요한 다른 핵심 정보 추가
-    }
-
     client = OpenAI()
     response = client.chat.completions.create(
     model="gpt-4o-2024-08-06",
@@ -140,10 +118,10 @@ def generate_reflection(trades_df, current_market_data, wonyyotti_strategy):
             "role": "user",
             "content": f"""
                 Recent trading data:
-                {json.dumps(recent_trades_summary, indent=2)}
+                {trades_df.to_json(orient='records')}
 
                 Current market data:
-                {json.dumps(market_summary, indent=2)}
+                {current_market_data}
 
                 Overall performance in the last 7 days: {performance:.2f}%
 
@@ -272,82 +250,82 @@ def create_driver():
         logger.error(f"ChromeDriver 생성 중 오류 발생: {e}")
         raise
 
-# def click_element_by_xpath(driver, xpath, element_name, wait_time=10):
-#     try:
-#         element = WebDriverWait(driver, wait_time).until(
-#             EC.presence_of_element_located((By.XPATH, xpath))
-#         )
-#         driver.execute_script("arguments[0].scrollIntoView(true);", element)
-#         element = WebDriverWait(driver, wait_time).until(
-#             EC.element_to_be_clickable((By.XPATH, xpath))
-#         )
-#         element.click()
-#         logger.info(f"{element_name} 클릭 완료")
-#         time.sleep(2)
-#     except TimeoutException:
-#         logger.error(f"{element_name} 요소를 찾는 데 시간이 초과되었습니다.")
-#     except ElementClickInterceptedException:
-#         logger.error(f"{element_name} 요소를 클릭할 수 없습니다. 다른 요소에 가려져 있을 수 있습니다.")
-#     except NoSuchElementException:
-#         logger.error(f"{element_name} 요소를 찾을 수 없습니다.")
-#     except Exception as e:
-#         logger.error(f"{element_name} 클릭 중 오류 발생: {e}")
+def click_element_by_xpath(driver, xpath, element_name, wait_time=10):
+    try:
+        element = WebDriverWait(driver, wait_time).until(
+            EC.presence_of_element_located((By.XPATH, xpath))
+        )
+        driver.execute_script("arguments[0].scrollIntoView(true);", element)
+        element = WebDriverWait(driver, wait_time).until(
+            EC.element_to_be_clickable((By.XPATH, xpath))
+        )
+        element.click()
+        logger.info(f"{element_name} 클릭 완료")
+        time.sleep(2)
+    except TimeoutException:
+        logger.error(f"{element_name} 요소를 찾는 데 시간이 초과되었습니다.")
+    except ElementClickInterceptedException:
+        logger.error(f"{element_name} 요소를 클릭할 수 없습니다. 다른 요소에 가려져 있을 수 있습니다.")
+    except NoSuchElementException:
+        logger.error(f"{element_name} 요소를 찾을 수 없습니다.")
+    except Exception as e:
+        logger.error(f"{element_name} 클릭 중 오류 발생: {e}")
 
-# def perform_chart_actions(driver):
-#     # 시간 메뉴 클릭
-#     click_element_by_xpath(
-#         driver,
-#         "/html/body/div[1]/div[2]/div[3]/span/div/div/div[1]/div/div/cq-menu[1]",
-#         "시간 메뉴"
-#     )
+def perform_chart_actions(driver):
+    # 시간 메뉴 클릭
+    click_element_by_xpath(
+        driver,
+        "/html/body/div[1]/div[2]/div[3]/span/div/div/div[1]/div/div/cq-menu[1]",
+        "시간 메뉴"
+    )
 
-#     # 1시간 옵션 선택
-#     click_element_by_xpath(
-#         driver,
-#         "/html/body/div[1]/div[2]/div[3]/span/div/div/div[1]/div/div/cq-menu[1]/cq-menu-dropdown/cq-item[8]",
-#         "1시간 옵션"
-#     )
+    # 1시간 옵션 선택
+    click_element_by_xpath(
+        driver,
+        "/html/body/div[1]/div[2]/div[3]/span/div/div/div[1]/div/div/cq-menu[1]/cq-menu-dropdown/cq-item[8]",
+        "1시간 옵션"
+    )
 
-#     # 지표 메뉴 클릭
-#     click_element_by_xpath(
-#         driver,
-#         "/html/body/div[1]/div[2]/div[3]/span/div/div/div[1]/div/div/cq-menu[3]",
-#         "지표 메뉴"
-#     )
+    # 지표 메뉴 클릭
+    click_element_by_xpath(
+        driver,
+        "/html/body/div[1]/div[2]/div[3]/span/div/div/div[1]/div/div/cq-menu[3]",
+        "지표 메뉴"
+    )
 
-#     # 볼린저 밴드 옵션 선택
-#     click_element_by_xpath(
-#         driver,
-#         "/html/body/div[1]/div[2]/div[3]/span/div/div/div[1]/div/div/cq-menu[3]/cq-menu-dropdown/cq-scroll/cq-studies/cq-studies-content/cq-item[15]",
-#         "볼린저 밴드 옵션"
-#     )
+    # 볼린저 밴드 옵션 선택
+    click_element_by_xpath(
+        driver,
+        "/html/body/div[1]/div[2]/div[3]/span/div/div/div[1]/div/div/cq-menu[3]/cq-menu-dropdown/cq-scroll/cq-studies/cq-studies-content/cq-item[15]",
+        "볼린저 밴드 옵션"
+    )
 
-# def capture_and_encode_screenshot():
-#     try:
-#         driver = create_driver()
-#         driver.get("https://upbit.com/full_chart?code=CRIX.UPBIT.KRW-BTC")
-#         logger.info("페이지 로드 완료")
-#         time.sleep(5)
-#         logger.info("차트 작업 시작")
-#         perform_chart_actions(driver)
-#         logger.info("차트 작업 완료")
+def capture_and_encode_screenshot():
+    try:
+        driver = create_driver()
+        driver.get("https://upbit.com/full_chart?code=CRIX.UPBIT.KRW-BTC")
+        logger.info("페이지 로드 완료")
+        time.sleep(5)
+        logger.info("차트 작업 시작")
+        perform_chart_actions(driver)
+        logger.info("차트 작업 완료")
 
-#         png = driver.get_screenshot_as_png()
-#         img = Image.open(io.BytesIO(png))
-#         img.thumbnail((2000, 2000))
-#         buffered = io.BytesIO()
-#         img.save(buffered, format="PNG")
-#         base64_image = base64.b64encode(buffered.getvalue()).decode('utf-8')
+        png = driver.get_screenshot_as_png()
+        img = Image.open(io.BytesIO(png))
+        img.thumbnail((2000, 2000))
+        buffered = io.BytesIO()
+        img.save(buffered, format="PNG")
+        base64_image = base64.b64encode(buffered.getvalue()).decode('utf-8')
 
-#         logger.info(f"스크린샷 캡처 완료.")
-#         driver.quit()
-#         return base64_image
-#     except WebDriverException as e:
-#         logger.error(f"WebDriver 오류 발생: {e}")
-#         return None
-#     except Exception as e:
-#         logger.error(f"차트 캡처 중 오류 발생: {e}")
-#         return None
+        logger.info(f"스크린샷 캡처 완료.")
+        driver.quit()
+        return base64_image
+    except WebDriverException as e:
+        logger.error(f"WebDriver 오류 발생: {e}")
+        return None
+    except Exception as e:
+        logger.error(f"차트 캡처 중 오류 발생: {e}")
+        return None
 
 # #로컬용
 # def get_combined_transcript(video_id):
@@ -370,219 +348,11 @@ def get_combined_transcript():
         logger.error(f"Error reading transcript from file: {e}")
         return ""
 
-def send_alert(message):
-    # 알림을 발송하는 함수 (예: 텔레그램)
-    telegram_token = os.getenv("TELEGRAM_BOT_TOKEN")
-    telegram_chat_id = os.getenv("TELEGRAM_CHAT_ID")
-    url = f"https://api.telegram.org/bot{telegram_token}/sendMessage"
-    params = {
-        'chat_id': telegram_chat_id,
-        'text': message
-    }
-    try:
-        requests.get(url, params=params)
-        logger.info("알림 발송 성공")
-    except Exception as e:
-        logger.error(f"알림 발송 실패: {e}")
-
-def calculate_support_resistance(df):
-    # 저항선과 지지선을 계산 (USD 차트를 기준으로)
-    n = 20  # 최근 20개의 봉을 사용
-    recent_high = df['high'].rolling(window=n).max()
-    recent_low = df['low'].rolling(window=n).min()
-    return recent_high.iloc[-1], recent_low.iloc[-1]
-
-def get_krw_balance():
-    # KRW 잔액 조회
-    balances = upbit.get_balances()
-    krw_balance = next((float(balance['balance']) for balance in balances if balance['currency'] == 'KRW'), 0)
-    return krw_balance
-
-def get_btc_balance():
-    # BTC 잔액 조회
-    balances = upbit.get_balances()
-    btc_balance = next((float(balance['balance']) for balance in balances if balance['currency'] == 'BTC'), 0)
-    return btc_balance
-
-def execute_buy_order(amount):
-    # 손절매 및 이익 실현 가격 설정
-    current_price = pyupbit.get_current_price("KRW-BTC")
-    stop_loss_price = current_price * 0.90  # 10% 손절
-    take_profit_price = current_price * 1.10  # 10% 이익 실현
-
-    if amount > 5000:
-        order = upbit.buy_market_order("KRW-BTC", amount)
-        logger.info(f"매수 주문 실행: {amount} KRW")
-        # 손절매 및 이익 실현 주문 설정 (업비트는 지원하지 않으므로 수동 구현 필요)
-        # 매수 후 손절매 및 이익 실현 모니터링 시작
-        monitor_position(stop_loss_price, take_profit_price, amount)
-        return order
-    else:
-        logger.info("매수 금액이 최소 주문 금액보다 적습니다.")
-        return None
-
-def execute_sell_order(amount):
-    # 분할 매도를 실행하는 함수
-    current_price = pyupbit.get_current_price("KRW-BTC")
-    if amount * current_price > 5000:
-        order = upbit.sell_market_order("KRW-BTC", amount)
-        logger.info(f"매도 주문 실행: {amount} BTC")
-        send_alert(f"매도 주문 실행: {amount} BTC")
-        return order
-    else:
-        logger.info("매도 금액이 최소 주문 금액보다 적습니다.")
-        return None
-
-def calculate_trade_amount(balance, risk_percentage):
-    # 잔고의 일정 비율을 매매 금액으로 사용
-    return balance * (risk_percentage / 100)
-
-def monitor_position(stop_loss_price, take_profit_price, amount):
-    while True:
-        # 현재 가격을 실시간으로 가져오기
-        current_price = pyupbit.get_current_price("KRW-BTC")
-        
-        # 손절매 조건: 현재 가격이 손절 가격 이하로 떨어질 경우
-        if current_price <= stop_loss_price:
-            order = upbit.sell_market_order("KRW-BTC", amount)
-            logger.info(f"손절매 주문 실행: {amount} BTC @ {current_price} KRW")
-            break  # 손절매 후 모니터링 종료
-        
-        # 이익 실현 조건: 현재 가격이 목표 가격 이상으로 상승할 경우
-        elif current_price >= take_profit_price:
-            order = upbit.sell_market_order("KRW-BTC", amount)
-            logger.info(f"이익 실현 주문 실행: {amount} BTC @ {current_price} KRW")
-            break  # 이익 실현 후 모니터링 종료
-        
-        # 1초 대기 후 다시 확인 (가격을 실시간으로 모니터링)
-        time.sleep(1)
-
-def update_resistance_support(current_price, resistance, support, breakout_margin=0.01):
-    if current_price > resistance * (1 + breakout_margin):
-        # 강한 상승 돌파, 저항선 업데이트
-        resistance = current_price
-    elif current_price < support * (1 - breakout_margin):
-        # 강한 하락 돌파, 지지선 업데이트
-        support = current_price
-    return resistance, support
-
-
-def is_buy_signal(df):
-    # 기술 지표 기반 매수 신호 감지
-    current_rsi = df['rsi'].iloc[-1]
-    macd = df['macd'].iloc[-1]
-    macd_signal = df['macd_signal'].iloc[-1]
-    return current_rsi < 30 and macd > macd_signal
-
-def is_sell_signal(df):
-    # 기술 지표 기반 매도 신호 감지
-    current_rsi = df['rsi'].iloc[-1]
-    macd = df['macd'].iloc[-1]
-    macd_signal = df['macd_signal'].iloc[-1]
-    return current_rsi > 70 and macd < macd_signal
-
-import time
-
-async def real_time_price_monitoring(resistance, support, stop_event):
-    # WebSocket URI 및 재연결 시도 횟수 초기화
-    uri = "wss://api.upbit.com/websocket/v1"
-    retry_count = 0
-
-    while not stop_event.is_set():
-        try:
-            # ping_interval과 ping_timeout 설정
-            async with websockets.connect(uri, ping_interval=20, ping_timeout=20) as websocket:
-                subscribe_data = [
-                    {"ticket": "test"},
-                    {"type": "ticker", "codes": ["KRW-BTC"]},
-                    {"format": "SIMPLE"}
-                ]
-                await websocket.send(json.dumps(subscribe_data))
-
-                # 최근 가격 데이터를 저장하기 위한 리스트
-                price_history = []
-                max_history_length = 100  # 최대 저장할 가격 데이터 수
-
-                # 최초 저항선과 지지선 출력
-                print(f"최초 저항선: {resistance}, 최초 지지선: {support}")
-
-                # 10분 타이머 초기화 (즉시 첫 번째 출력을 위해 10분 전으로 설정)
-                last_print_time = time.time() - 600
-
-                while not stop_event.is_set():
-                    data = await websocket.recv()
-                    data = json.loads(data)
-                    current_price = data['tp']
-
-                    # 10분 간격으로 현재 가격과 지표 출력
-                    current_time = time.time()
-                    if current_time - last_print_time >= 600:  # 600초 = 10분
-                        print(f"현재 가격: {current_price}")
-
-                        # 가격 히스토리 업데이트
-                        price_data = {
-                            'open': current_price,
-                            'high': current_price,
-                            'low': current_price,
-                            'close': current_price,
-                            'volume': 1  # 예시 볼륨 값
-                        }
-                        price_history.append(price_data)
-                        if len(price_history) > max_history_length:
-                            price_history.pop(0)
-
-                        # DataFrame 생성 및 지표 추가
-                        df = pd.DataFrame(price_history)
-                        df = add_indicators(df)
-
-                        # 지표 출력
-                        print(f"현재 RSI: {df['rsi'].iloc[-1]}")
-                        print(f"현재 MACD: {df['macd'].iloc[-1]}, Signal: {df['macd_signal'].iloc[-1]}")
-                        print(f"볼린저 밴드 상단: {df['bb_bbh'].iloc[-1]}, 중간: {df['bb_bbm'].iloc[-1]}, 하단: {df['bb_bbl'].iloc[-1]}")
-
-                        last_print_time = current_time
-
-                    # 저항선 및 지지선 업데이트 후 매매 신호 확인
-                    new_resistance, new_support = update_resistance_support(current_price, resistance, support)
-                    if current_price > resistance:  # 저항선 돌파 시 매수
-                        print("저항선 돌파: 매수 주문을 실행합니다.")
-                        krw_balance = get_krw_balance()
-                        trade_amount = calculate_trade_amount(krw_balance, risk_percentage=10)
-                        execute_buy_order(trade_amount)
-                        resistance = new_resistance
-                        print(f"업데이트된 저항선: {resistance}")
-
-                    elif current_price < support:  # 지지선 붕괴 시 매도
-                        print("지지선 붕괴: 매도 주문을 실행합니다.")
-                        btc_balance = get_btc_balance()
-                        trade_amount = calculate_trade_amount(btc_balance * current_price, risk_percentage=10)
-                        execute_sell_order(trade_amount / current_price)
-                        support = new_support
-                        print(f"업데이트된 지지선: {support}")
-
-                    # 매매 신호 확인
-                    if is_buy_signal(df):
-                        krw_balance = get_krw_balance()
-                        trade_amount = calculate_trade_amount(krw_balance, risk_percentage=5)
-                        execute_buy_order(trade_amount)
-                        print("기술 지표 기반 매수 신호: 매수 주문을 실행합니다.")
-                    elif is_sell_signal(df):
-                        btc_balance = get_btc_balance()
-                        trade_amount = calculate_trade_amount(btc_balance * current_price, risk_percentage=5)
-                        execute_sell_order(trade_amount / current_price)
-                        print("기술 지표 기반 매도 신호: 매도 주문을 실행합니다.")
-
-                    resistance, support = new_resistance, new_support
-                    await asyncio.sleep(1)  # 1초마다 체크
-
-        except websockets.exceptions.ConnectionClosedError as e:
-            print(f"WebSocket 연결이 끊어졌습니다: {e}. 재연결을 시도합니다.")
-            await asyncio.sleep(5)  # 재연결 전 대기 시간
-
-def start_real_time_monitoring(resistance, support, stop_event):
-    asyncio.run(real_time_price_monitoring(resistance, support, stop_event))
-
 def ai_trading():
+    # Upbit 객체 생성
+    access = os.getenv("UPBIT_ACCESS_KEY")
+    secret = os.getenv("UPBIT_SECRET_KEY")
+    upbit = pyupbit.Upbit(access, secret)
 
     # Wonnyotti의 전략 가져오기
     wonyyotti_strategy = get_combined_transcript()  # strategy.txt에서 내용 가져오기
@@ -636,7 +406,7 @@ def ai_trading():
         except Exception as e:
             logger.error(f"Error fetching USD hourly OHLCV data: {e}")
             return pd.DataFrame()
-        
+
     def fetch_fear_and_greed():
         return get_fear_and_greed_index()
 
@@ -651,8 +421,8 @@ def ai_trading():
     def fetch_transcript():
         return get_combined_transcript()
 
-    # def fetch_chart_image():
-    #     return capture_and_encode_screenshot()
+    def fetch_chart_image():
+        return capture_and_encode_screenshot()
 
     def fetch_usd_krw_exchange_rate():
         try:
@@ -673,7 +443,7 @@ def ai_trading():
             executor.submit(fetch_fear_and_greed): 'fear_greed',
             executor.submit(fetch_news): 'news',
             executor.submit(fetch_transcript): 'transcript',
-            # executor.submit(fetch_chart_image): 'chart_image',
+            executor.submit(fetch_chart_image): 'chart_image',
             executor.submit(fetch_usd_krw_exchange_rate): 'usd_krw_rate',
             executor.submit(fetch_daily_usd_ohlcv): 'daily_usd_ohlcv',
             executor.submit(fetch_hourly_usd_ohlcv): 'hourly_usd_ohlcv',
@@ -698,9 +468,8 @@ def ai_trading():
     df_hourly_usd = results.get('hourly_usd_ohlcv', pd.DataFrame())
     fear_greed_index = results.get('fear_greed', {})
     news_headlines = results.get('news', [])
-    # youtube_transcript = results.get('transcript', "")
-    wonyyotti_strategy = results.get('transcript', "")
-    # chart_image = results.get('chart_image', None)
+    youtube_transcript = results.get('transcript', "")
+    chart_image = results.get('chart_image', None)
     usd_krw_rate = results.get('usd_krw_rate', None)
 
     # 필요한 컬럼만 선택
@@ -711,13 +480,6 @@ def ai_trading():
     df_hourly_krw = select_columns(df_hourly_krw)
     df_daily_usd = select_columns(df_daily_usd)
     df_hourly_usd = select_columns(df_hourly_usd)
-
-     # 저항선과 지지선을 USD 차트를 기반으로 계산
-    if df_hourly_usd.empty:
-        logger.error("시간봉 USD 데이터가 없습니다.")
-        return
-
-    resistance, support = calculate_support_resistance(df_hourly_usd)
 
     # DataFrame을 JSON으로 변환
     df_daily_krw_json = df_daily_krw.to_json(orient='records')
@@ -777,6 +539,7 @@ def ai_trading():
                 - Recent news headlines and their impact
                 - The Fear and Greed Index and what it means
                 - Overall market sentiment
+                - Patterns and trends seen in chart images
                 - Recent trading performance and reflection
                 
                 Particularly important is to always refer to the trading method of 'Wonyyotti', a legendary Korean investor, to assess the current situation and make trading decisions. Wonyyotti's trading method is as follows:
@@ -808,13 +571,13 @@ USD/KRW Exchange Rate: {usd_krw_rate}
 KRW-USD Premium (%): {premium_formatted}
 Recent news headlines: {json.dumps(news_headlines)}
 Fear and Greed Index: {json.dumps(fear_greed_index)}"""
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/png;base64,{chart_image}"
+                        }
                     }
-                    # {
-                    #     "type": "image_url",
-                    #     "image_url": {
-                    #         "url": f"data:image/png;base64,{chart_image}"
-                    #     }
-                    # }
                 ]
             }
         ],
@@ -870,7 +633,7 @@ Fear and Greed Index: {json.dumps(fear_greed_index)}"""
 
     order_executed = False
 
-    # AI의 결정에 따라 매매 실행
+    # 매매 조건 수정: 차이에 관계없이 매매를 실행
     if difference > 0:
         # 매수 실행
         buy_amount_krw = total_asset * (difference / 100)
@@ -909,22 +672,6 @@ Fear and Greed Index: {json.dumps(fear_greed_index)}"""
         executed_percentage=abs(difference) if order_executed else 0,
         reflection=reflection
     )
-
-    # **동적 리밸런싱 시작: 실시간 가격 모니터링**
-    # 종료 이벤트 생성
-    stop_event = threading.Event()
-    monitor_thread = threading.Thread(target=start_real_time_monitoring, args=(resistance, support, stop_event))
-    monitor_thread.start()
-
-    # 메인 스레드에서 필요한 작업 수행...
-    # 예: 일정 시간 대기 후 종료
-    try:
-        while True:
-            time.sleep(1)
-    except KeyboardInterrupt:
-        logger.info("프로그램이 종료됩니다.")
-        stop_event.set()
-        monitor_thread.join()
 
 def job():
     try:
