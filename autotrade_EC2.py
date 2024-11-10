@@ -393,17 +393,6 @@ def get_btc_balance():
     btc_balance = next((float(balance['balance']) for balance in balances if balance['currency'] == 'BTC'), 0)
     return btc_balance
 
-def execute_buy_order(amount):
-    # 분할 매수를 실행하는 함수
-    if amount > 5000:
-        order = upbit.buy_market_order("KRW-BTC", amount)
-        logger.info(f"매수 주문 실행: {amount} KRW")
-        send_alert(f"매수 주문 실행: {amount} KRW")
-        return order
-    else:
-        logger.info("매수 금액이 최소 주문 금액보다 적습니다.")
-        return None
-
 def execute_sell_order(amount):
     # 분할 매도를 실행하는 함수
     current_price = pyupbit.get_current_price("KRW-BTC")
@@ -649,10 +638,6 @@ def ai_trading():
     # 분할 매매를 위한 카운터 초기화
     buy_count = 0
     sell_count = 0
-
-    # 실시간 가격 모니터링 스레드 시작
-    loop = asyncio.new_event_loop()
-    threading.Thread(target=lambda: asyncio.run(real_time_price_monitoring(resistance, support))).start()
 
     # RSI 및 MACD 기반 매매 신호 확인
     current_rsi = df_hourly_usd['rsi'].iloc[-1]
