@@ -393,6 +393,23 @@ def get_btc_balance():
     btc_balance = next((float(balance['balance']) for balance in balances if balance['currency'] == 'BTC'), 0)
     return btc_balance
 
+def execute_buy_order(amount):
+    # 손절매 및 이익 실현 가격 설정
+    current_price = pyupbit.get_current_price("KRW-BTC")
+    stop_loss_price = current_price * 0.90  # 10% 손절
+    take_profit_price = current_price * 1.10  # 10% 이익 실현
+
+    if amount > 5000:
+        order = upbit.buy_market_order("KRW-BTC", amount)
+        logger.info(f"매수 주문 실행: {amount} KRW")
+        # 손절매 및 이익 실현 주문 설정 (업비트는 지원하지 않으므로 수동 구현 필요)
+        # 매수 후 손절매 및 이익 실현 모니터링 시작
+        monitor_position(stop_loss_price, take_profit_price, amount)
+        return order
+    else:
+        logger.info("매수 금액이 최소 주문 금액보다 적습니다.")
+        return None
+
 def execute_sell_order(amount):
     # 분할 매도를 실행하는 함수
     current_price = pyupbit.get_current_price("KRW-BTC")
@@ -429,29 +446,6 @@ def monitor_position(stop_loss_price, take_profit_price, amount):
         # 1초 대기 후 다시 확인 (가격을 실시간으로 모니터링)
         time.sleep(1)
 
-def execute_buy_order(amount):
-    # 손절매 및 이익 실현 가격 설정
-    current_price = pyupbit.get_current_price("KRW-BTC")
-    stop_loss_price = current_price * 0.90  # 10% 손절
-    take_profit_price = current_price * 1.10  # 10% 이익 실현
-
-    if amount > 5000:
-        order = upbit.buy_market_order("KRW-BTC", amount)
-        logger.info(f"매수 주문 실행: {amount} KRW")
-        # 손절매 및 이익 실현 주문 설정 (업비트는 지원하지 않으므로 수동 구현 필요)
-        # 매수 후 손절매 및 이익 실현 모니터링 시작
-        monitor_position(stop_loss_price, take_profit_price, amount)
-        return order
-    else:
-        logger.info("매수 금액이 최소 주문 금액보다 적습니다.")
-        return None
-    
-def is_buy_signal(current_rsi, macd, macd_signal):
-    return current_rsi < 30 and macd > macd_signal
-
-def is_sell_signal(current_rsi, macd, macd_signal):
-    return current_rsi > 70 and macd < macd_signal
-
 def update_resistance_support(current_price, resistance, support, breakout_margin=0.01):
     if current_price > resistance * (1 + breakout_margin):
         # 강한 상승 돌파, 저항선 업데이트
@@ -460,6 +454,21 @@ def update_resistance_support(current_price, resistance, support, breakout_margi
         # 강한 하락 돌파, 지지선 업데이트
         support = current_price
     return resistance, support
+
+
+def is_buy_signal(df):
+    # 기술 지표 기반 매수 신호 감지
+    current_rsi = df['rsi'].iloc[-1]
+    macd = df['macd'].iloc[-1]
+    macd_signal = df['macd_signal'].iloc[-1]
+    return current_rsi < 30 and macd > macd_signal
+
+def is_sell_signal(df):
+    # 기술 지표 기반 매도 신호 감지
+    current_rsi = df['rsi'].iloc[-1]
+    macd = df['macd'].iloc[-1]
+    macd_signal = df['macd_signal'].iloc[-1]
+    return current_rsi > 70 and macd < macd_signal
 
 async def real_time_price_monitoring(resistance, support):
     # 실시간 가격 모니터링하여 저항선 돌파 및 지지선 붕괴 시 매매 실행
@@ -472,11 +481,20 @@ async def real_time_price_monitoring(resistance, support):
         ]
         await websocket.send(json.dumps(subscribe_data))
         
+        # 최근 가격 데이터를 저장하기 위한 리스트
+        price_history = []
+        max_history_length = 100  # 최대 저장할 가격 데이터 수
+
         while True:
             data = await websocket.recv()
             data = json.loads(data)
             current_price = data['tp']
             print(f"현재 가격: {current_price}")
+
+            # 가격 히스토리 업데이트
+            price_history.append(current_price)
+            if len(price_history) > max_history_length:
+                price_history.pop(0)
 
             # 저항선 및 지지선 업데이트
             resistance, support = update_resistance_support(current_price, resistance, support)
@@ -490,7 +508,20 @@ async def real_time_price_monitoring(resistance, support):
                 btc_balance = get_btc_balance()
                 trade_amount = calculate_trade_amount(btc_balance * current_price, risk_percentage=5)
                 execute_sell_order(trade_amount / current_price)
-
+            else:
+                # 주기적으로 기술 지표 기반 매매 신호 확인 (예: 1분마다)
+                if len(price_history) >= 60:
+                    # 데이터프레임 생성
+                    df = pd.DataFrame({'close': price_history})
+                    df = add_indicators(df)
+                    if is_buy_signal(df):
+                        krw_balance = get_krw_balance()
+                        trade_amount = calculate_trade_amount(krw_balance, risk_percentage=5)
+                        execute_buy_order(trade_amount)
+                    elif is_sell_signal(df):
+                        btc_balance = get_btc_balance()
+                        trade_amount = calculate_trade_amount(btc_balance * current_price, risk_percentage=5)
+                        execute_sell_order(trade_amount / current_price)
             await asyncio.sleep(0.1)  # 0.1초마다 체크 
 
 def ai_trading():
@@ -629,33 +660,6 @@ def ai_trading():
         return
 
     resistance, support = calculate_support_resistance(df_hourly_usd)
-
-     # RSI를 사용하여 과매수/과매도 상태 판단
-    overbought_rsi_threshold = 70
-    oversold_rsi_threshold = 30
-    current_rsi = df_hourly_usd['rsi'].iloc[-1]
-
-    # 분할 매매를 위한 카운터 초기화
-    buy_count = 0
-    sell_count = 0
-
-    # RSI 및 MACD 기반 매매 신호 확인
-    current_rsi = df_hourly_usd['rsi'].iloc[-1]
-    macd = df_hourly_usd['macd'].iloc[-1]
-    macd_signal = df_hourly_usd['macd_signal'].iloc[-1]
-    current_price = pyupbit.get_current_price("KRW-BTC")
-
-    if is_buy_signal(current_rsi, macd, macd_signal):
-        krw_balance = get_krw_balance()
-        trade_amount = calculate_trade_amount(krw_balance, risk_percentage=5)
-        execute_buy_order(trade_amount)
-    elif is_sell_signal(current_rsi, macd, macd_signal):
-        btc_balance = get_btc_balance()
-        trade_amount = calculate_trade_amount(btc_balance * current_price, risk_percentage=5)
-        execute_sell_order(trade_amount / current_price)
-
-    # 실시간 가격 모니터링 시작
-    threading.Thread(target=lambda: asyncio.run(real_time_price_monitoring(resistance, support))).start()
 
     # DataFrame을 JSON으로 변환
     df_daily_krw_json = df_daily_krw.to_json(orient='records')
@@ -808,7 +812,7 @@ Fear and Greed Index: {json.dumps(fear_greed_index)}"""
 
     order_executed = False
 
-    # 매매 조건 수정: 차이에 관계없이 매매를 실행
+    # AI의 결정에 따라 매매 실행
     if difference > 0:
         # 매수 실행
         buy_amount_krw = total_asset * (difference / 100)
@@ -847,6 +851,9 @@ Fear and Greed Index: {json.dumps(fear_greed_index)}"""
         executed_percentage=abs(difference) if order_executed else 0,
         reflection=reflection
     )
+
+     # **동적 리밸런싱 시작: 실시간 가격 모니터링**
+    threading.Thread(target=lambda: asyncio.run(real_time_price_monitoring(resistance, support))).start()
 
 def job():
     try:
@@ -906,4 +913,4 @@ if __name__ == "__main__":
     logger.info("스케줄 작업을 시작합니다.")
     # schedule_jobs()
 
-job()
+    job()
