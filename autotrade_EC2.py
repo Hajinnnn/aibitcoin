@@ -485,7 +485,7 @@ async def real_time_price_monitoring(resistance, support):
         price_history = []
         max_history_length = 100  # 최대 저장할 가격 데이터 수
 
-        while True:
+        while not stop_event.is_set():
             data = await websocket.recv()
             data = json.loads(data)
             current_price = data['tp']
@@ -495,7 +495,7 @@ async def real_time_price_monitoring(resistance, support):
             price_history.append(current_price)
             if len(price_history) > max_history_length:
                 price_history.pop(0)
-
+            
             # 저항선 및 지지선 업데이트
             resistance, support = update_resistance_support(current_price, resistance, support)
 
@@ -522,7 +522,10 @@ async def real_time_price_monitoring(resistance, support):
                         btc_balance = get_btc_balance()
                         trade_amount = calculate_trade_amount(btc_balance * current_price, risk_percentage=5)
                         execute_sell_order(trade_amount / current_price)
-            await asyncio.sleep(0.1)  # 0.1초마다 체크 
+            await asyncio.sleep(1)  # 1초마다 체크 
+
+def start_real_time_monitoring(resistance, support, stop_event):
+    asyncio.run(real_time_price_monitoring(resistance, support, stop_event))
 
 def ai_trading():
 
@@ -852,8 +855,21 @@ Fear and Greed Index: {json.dumps(fear_greed_index)}"""
         reflection=reflection
     )
 
-     # **동적 리밸런싱 시작: 실시간 가격 모니터링**
-    threading.Thread(target=lambda: asyncio.run(real_time_price_monitoring(resistance, support))).start()
+    # **동적 리밸런싱 시작: 실시간 가격 모니터링**
+    # 종료 이벤트 생성
+    stop_event = threading.Event()
+    monitor_thread = threading.Thread(target=start_real_time_monitoring, args=(resistance, support, stop_event))
+    monitor_thread.start()
+
+    # 메인 스레드에서 필요한 작업 수행...
+    # 예: 일정 시간 대기 후 종료
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        logger.info("프로그램이 종료됩니다.")
+        stop_event.set()
+        monitor_thread.join()
 
 def job():
     try:
