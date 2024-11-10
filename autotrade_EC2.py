@@ -261,82 +261,82 @@ def create_driver():
         logger.error(f"ChromeDriver 생성 중 오류 발생: {e}")
         raise
 
-def click_element_by_xpath(driver, xpath, element_name, wait_time=10):
-    try:
-        element = WebDriverWait(driver, wait_time).until(
-            EC.presence_of_element_located((By.XPATH, xpath))
-        )
-        driver.execute_script("arguments[0].scrollIntoView(true);", element)
-        element = WebDriverWait(driver, wait_time).until(
-            EC.element_to_be_clickable((By.XPATH, xpath))
-        )
-        element.click()
-        logger.info(f"{element_name} 클릭 완료")
-        time.sleep(2)
-    except TimeoutException:
-        logger.error(f"{element_name} 요소를 찾는 데 시간이 초과되었습니다.")
-    except ElementClickInterceptedException:
-        logger.error(f"{element_name} 요소를 클릭할 수 없습니다. 다른 요소에 가려져 있을 수 있습니다.")
-    except NoSuchElementException:
-        logger.error(f"{element_name} 요소를 찾을 수 없습니다.")
-    except Exception as e:
-        logger.error(f"{element_name} 클릭 중 오류 발생: {e}")
+# def click_element_by_xpath(driver, xpath, element_name, wait_time=10):
+#     try:
+#         element = WebDriverWait(driver, wait_time).until(
+#             EC.presence_of_element_located((By.XPATH, xpath))
+#         )
+#         driver.execute_script("arguments[0].scrollIntoView(true);", element)
+#         element = WebDriverWait(driver, wait_time).until(
+#             EC.element_to_be_clickable((By.XPATH, xpath))
+#         )
+#         element.click()
+#         logger.info(f"{element_name} 클릭 완료")
+#         time.sleep(2)
+#     except TimeoutException:
+#         logger.error(f"{element_name} 요소를 찾는 데 시간이 초과되었습니다.")
+#     except ElementClickInterceptedException:
+#         logger.error(f"{element_name} 요소를 클릭할 수 없습니다. 다른 요소에 가려져 있을 수 있습니다.")
+#     except NoSuchElementException:
+#         logger.error(f"{element_name} 요소를 찾을 수 없습니다.")
+#     except Exception as e:
+#         logger.error(f"{element_name} 클릭 중 오류 발생: {e}")
 
-def perform_chart_actions(driver):
-    # 시간 메뉴 클릭
-    click_element_by_xpath(
-        driver,
-        "/html/body/div[1]/div[2]/div[3]/span/div/div/div[1]/div/div/cq-menu[1]",
-        "시간 메뉴"
-    )
+# def perform_chart_actions(driver):
+#     # 시간 메뉴 클릭
+#     click_element_by_xpath(
+#         driver,
+#         "/html/body/div[1]/div[2]/div[3]/span/div/div/div[1]/div/div/cq-menu[1]",
+#         "시간 메뉴"
+#     )
 
-    # 1시간 옵션 선택
-    click_element_by_xpath(
-        driver,
-        "/html/body/div[1]/div[2]/div[3]/span/div/div/div[1]/div/div/cq-menu[1]/cq-menu-dropdown/cq-item[8]",
-        "1시간 옵션"
-    )
+#     # 1시간 옵션 선택
+#     click_element_by_xpath(
+#         driver,
+#         "/html/body/div[1]/div[2]/div[3]/span/div/div/div[1]/div/div/cq-menu[1]/cq-menu-dropdown/cq-item[8]",
+#         "1시간 옵션"
+#     )
 
-    # 지표 메뉴 클릭
-    click_element_by_xpath(
-        driver,
-        "/html/body/div[1]/div[2]/div[3]/span/div/div/div[1]/div/div/cq-menu[3]",
-        "지표 메뉴"
-    )
+#     # 지표 메뉴 클릭
+#     click_element_by_xpath(
+#         driver,
+#         "/html/body/div[1]/div[2]/div[3]/span/div/div/div[1]/div/div/cq-menu[3]",
+#         "지표 메뉴"
+#     )
 
-    # 볼린저 밴드 옵션 선택
-    click_element_by_xpath(
-        driver,
-        "/html/body/div[1]/div[2]/div[3]/span/div/div/div[1]/div/div/cq-menu[3]/cq-menu-dropdown/cq-scroll/cq-studies/cq-studies-content/cq-item[15]",
-        "볼린저 밴드 옵션"
-    )
+#     # 볼린저 밴드 옵션 선택
+#     click_element_by_xpath(
+#         driver,
+#         "/html/body/div[1]/div[2]/div[3]/span/div/div/div[1]/div/div/cq-menu[3]/cq-menu-dropdown/cq-scroll/cq-studies/cq-studies-content/cq-item[15]",
+#         "볼린저 밴드 옵션"
+#     )
 
-def capture_and_encode_screenshot():
-    try:
-        driver = create_driver()
-        driver.get("https://upbit.com/full_chart?code=CRIX.UPBIT.KRW-BTC")
-        logger.info("페이지 로드 완료")
-        time.sleep(5)
-        logger.info("차트 작업 시작")
-        perform_chart_actions(driver)
-        logger.info("차트 작업 완료")
+# def capture_and_encode_screenshot():
+#     try:
+#         driver = create_driver()
+#         driver.get("https://upbit.com/full_chart?code=CRIX.UPBIT.KRW-BTC")
+#         logger.info("페이지 로드 완료")
+#         time.sleep(5)
+#         logger.info("차트 작업 시작")
+#         perform_chart_actions(driver)
+#         logger.info("차트 작업 완료")
 
-        png = driver.get_screenshot_as_png()
-        img = Image.open(io.BytesIO(png))
-        img.thumbnail((2000, 2000))
-        buffered = io.BytesIO()
-        img.save(buffered, format="PNG")
-        base64_image = base64.b64encode(buffered.getvalue()).decode('utf-8')
+#         png = driver.get_screenshot_as_png()
+#         img = Image.open(io.BytesIO(png))
+#         img.thumbnail((2000, 2000))
+#         buffered = io.BytesIO()
+#         img.save(buffered, format="PNG")
+#         base64_image = base64.b64encode(buffered.getvalue()).decode('utf-8')
 
-        logger.info(f"스크린샷 캡처 완료.")
-        driver.quit()
-        return base64_image
-    except WebDriverException as e:
-        logger.error(f"WebDriver 오류 발생: {e}")
-        return None
-    except Exception as e:
-        logger.error(f"차트 캡처 중 오류 발생: {e}")
-        return None
+#         logger.info(f"스크린샷 캡처 완료.")
+#         driver.quit()
+#         return base64_image
+#     except WebDriverException as e:
+#         logger.error(f"WebDriver 오류 발생: {e}")
+#         return None
+#     except Exception as e:
+#         logger.error(f"차트 캡처 중 오류 발생: {e}")
+#         return None
 
 # #로컬용
 # def get_combined_transcript(video_id):
@@ -394,17 +394,11 @@ def get_btc_balance():
     return btc_balance
 
 def execute_buy_order(amount):
-    # 손절매 및 이익 실현 가격 설정
-    current_price = pyupbit.get_current_price("KRW-BTC")
-    stop_loss_price = current_price * 0.90  # 10% 손절
-    take_profit_price = current_price * 1.10  # 10% 이익 실현
-
+    # 분할 매수를 실행하는 함수
     if amount > 5000:
         order = upbit.buy_market_order("KRW-BTC", amount)
         logger.info(f"매수 주문 실행: {amount} KRW")
-        # 손절매 및 이익 실현 주문 설정 (업비트는 지원하지 않으므로 수동 구현 필요)
-        # 매수 후 손절매 및 이익 실현 모니터링 시작
-        monitor_position(stop_loss_price, take_profit_price, amount)
+        send_alert(f"매수 주문 실행: {amount} KRW")
         return order
     else:
         logger.info("매수 금액이 최소 주문 금액보다 적습니다.")
@@ -446,11 +440,37 @@ def monitor_position(stop_loss_price, take_profit_price, amount):
         # 1초 대기 후 다시 확인 (가격을 실시간으로 모니터링)
         time.sleep(1)
 
+def execute_buy_order(amount):
+    # 손절매 및 이익 실현 가격 설정
+    current_price = pyupbit.get_current_price("KRW-BTC")
+    stop_loss_price = current_price * 0.90  # 10% 손절
+    take_profit_price = current_price * 1.10  # 10% 이익 실현
+
+    if amount > 5000:
+        order = upbit.buy_market_order("KRW-BTC", amount)
+        logger.info(f"매수 주문 실행: {amount} KRW")
+        # 손절매 및 이익 실현 주문 설정 (업비트는 지원하지 않으므로 수동 구현 필요)
+        # 매수 후 손절매 및 이익 실현 모니터링 시작
+        monitor_position(stop_loss_price, take_profit_price, amount)
+        return order
+    else:
+        logger.info("매수 금액이 최소 주문 금액보다 적습니다.")
+        return None
+    
 def is_buy_signal(current_rsi, macd, macd_signal):
     return current_rsi < 30 and macd > macd_signal
 
 def is_sell_signal(current_rsi, macd, macd_signal):
     return current_rsi > 70 and macd < macd_signal
+
+def update_resistance_support(current_price, resistance, support, breakout_margin=0.01):
+    if current_price > resistance * (1 + breakout_margin):
+        # 강한 상승 돌파, 저항선 업데이트
+        resistance = current_price
+    elif current_price < support * (1 - breakout_margin):
+        # 강한 하락 돌파, 지지선 업데이트
+        support = current_price
+    return resistance, support
 
 async def real_time_price_monitoring(resistance, support):
     # 실시간 가격 모니터링하여 저항선 돌파 및 지지선 붕괴 시 매매 실행
@@ -553,8 +573,8 @@ def ai_trading():
     def fetch_transcript():
         return get_combined_transcript()
 
-    def fetch_chart_image():
-        return capture_and_encode_screenshot()
+    # def fetch_chart_image():
+    #     return capture_and_encode_screenshot()
 
     def fetch_usd_krw_exchange_rate():
         try:
@@ -575,7 +595,7 @@ def ai_trading():
             executor.submit(fetch_fear_and_greed): 'fear_greed',
             executor.submit(fetch_news): 'news',
             executor.submit(fetch_transcript): 'transcript',
-            executor.submit(fetch_chart_image): 'chart_image',
+            # executor.submit(fetch_chart_image): 'chart_image',
             executor.submit(fetch_usd_krw_exchange_rate): 'usd_krw_rate',
             executor.submit(fetch_daily_usd_ohlcv): 'daily_usd_ohlcv',
             executor.submit(fetch_hourly_usd_ohlcv): 'hourly_usd_ohlcv',
@@ -602,7 +622,7 @@ def ai_trading():
     news_headlines = results.get('news', [])
     # youtube_transcript = results.get('transcript', "")
     wonyyotti_strategy = results.get('transcript', "")
-    chart_image = results.get('chart_image', None)
+    # chart_image = results.get('chart_image', None)
     usd_krw_rate = results.get('usd_krw_rate', None)
 
     # 필요한 컬럼만 선택
@@ -630,7 +650,8 @@ def ai_trading():
     buy_count = 0
     sell_count = 0
 
-    # 실시간 가격 모니터링 스레드 시작 (한 번만 실행)
+    # 실시간 가격 모니터링 스레드 시작
+    loop = asyncio.new_event_loop()
     threading.Thread(target=lambda: asyncio.run(real_time_price_monitoring(resistance, support))).start()
 
     # RSI 및 MACD 기반 매매 신호 확인
@@ -647,6 +668,9 @@ def ai_trading():
         btc_balance = get_btc_balance()
         trade_amount = calculate_trade_amount(btc_balance * current_price, risk_percentage=5)
         execute_sell_order(trade_amount / current_price)
+
+    # 실시간 가격 모니터링 시작
+    threading.Thread(target=lambda: asyncio.run(real_time_price_monitoring(resistance, support))).start()
 
     # DataFrame을 JSON으로 변환
     df_daily_krw_json = df_daily_krw.to_json(orient='records')
@@ -706,7 +730,6 @@ def ai_trading():
                 - Recent news headlines and their impact
                 - The Fear and Greed Index and what it means
                 - Overall market sentiment
-                - Patterns and trends seen in chart images
                 - Recent trading performance and reflection
                 
                 Particularly important is to always refer to the trading method of 'Wonyyotti', a legendary Korean investor, to assess the current situation and make trading decisions. Wonyyotti's trading method is as follows:
@@ -738,13 +761,13 @@ USD/KRW Exchange Rate: {usd_krw_rate}
 KRW-USD Premium (%): {premium_formatted}
 Recent news headlines: {json.dumps(news_headlines)}
 Fear and Greed Index: {json.dumps(fear_greed_index)}"""
-                    },
-                    {
-                        "type": "image_url",
-                        "image_url": {
-                            "url": f"data:image/png;base64,{chart_image}"
-                        }
                     }
+                    # {
+                    #     "type": "image_url",
+                    #     "image_url": {
+                    #         "url": f"data:image/png;base64,{chart_image}"
+                    #     }
+                    # }
                 ]
             }
         ],
@@ -846,6 +869,44 @@ def job():
     except Exception as e:
         logger.error(f"An error occurred: {e}")
 
+# if __name__ == "__main__":
+#     # 로깅 설정
+#     logging.basicConfig(level=logging.INFO)
+#     logger = logging.getLogger(__name__)
+
+#     load_dotenv()
+
+#     # 데이터베이스 초기화
+#     init_db()
+
+#     # # 테스트용 바로 실행
+#     # job()
+
+#     # # 매일 특정 시간에 실행
+#     # schedule.every().day.at("00:00").do(job)
+#     # schedule.every().day.at("04:00").do(job)
+#     # schedule.every().day.at("08:00").do(job)
+#     # schedule.every().day.at("12:00").do(job)
+#     # schedule.every().day.at("16:00").do(job)
+#     # schedule.every().day.at("20:00").do(job)
+
+#     while True:
+#         schedule.run_pending()
+#         time.sleep(1)
+
+# def schedule_jobs():
+#     ny_timezone = pytz.timezone("America/New_York")
+#     schedule.every().day.at("00:00").do(job)
+#     schedule.every().day.at("08:00").do(job)
+#     schedule.every().day.at("16:00").do(job)
+
+#     try:
+#         while True:
+#             schedule.run_pending()
+#             time.sleep(1)
+#     except KeyboardInterrupt:
+#         logger.info("스케줄 작업이 중단되었습니다.")
+
 if __name__ == "__main__":
     # 로깅 설정
     logging.basicConfig(level=logging.INFO)
@@ -860,5 +921,4 @@ if __name__ == "__main__":
     logger.info("스케줄 작업을 시작합니다.")
     # schedule_jobs()
 
-    # 테스트용 바로 실행
-    job()
+job()
