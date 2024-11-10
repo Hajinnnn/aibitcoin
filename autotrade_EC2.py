@@ -490,7 +490,7 @@ async def real_time_price_monitoring(resistance, support, stop_event):
         # 최초 저항선과 지지선 출력
         print(f"최초 저항선: {resistance}, 최초 지지선: {support}")
 
-         # 10분 타이머 초기화 (즉시 첫 번째 출력을 위해 10분 전으로 설정)
+        # 10분 타이머 초기화 (즉시 첫 번째 출력을 위해 10분 전으로 설정)
         last_print_time = time.time() - 600
 
         while not stop_event.is_set():
@@ -498,32 +498,33 @@ async def real_time_price_monitoring(resistance, support, stop_event):
             data = json.loads(data)
             current_price = data['tp']
             
-            # 10분 간격으로 현재 가격 출력
+            # 10분 간격으로 현재 가격과 지표 출력
             current_time = time.time()
             if current_time - last_print_time >= 600:  # 600초 = 10분
                 print(f"현재 가격: {current_price}")
+
+                # 가격 히스토리 업데이트
+                price_data = {
+                    'open': current_price,
+                    'high': current_price,
+                    'low': current_price,
+                    'close': current_price,
+                    'volume': 1  # 예시 볼륨 값
+                }
+                price_history.append(price_data)
+                if len(price_history) > max_history_length:
+                    price_history.pop(0)
+                
+                # DataFrame 생성 및 지표 추가
+                df = pd.DataFrame(price_history)
+                df = add_indicators(df)
+
+                # 지표 출력
+                print(f"현재 RSI: {df['rsi'].iloc[-1]}")
+                print(f"현재 MACD: {df['macd'].iloc[-1]}, Signal: {df['macd_signal'].iloc[-1]}")
+                print(f"볼린저 밴드 상단: {df['bb_bbh'].iloc[-1]}, 중간: {df['bb_bbm'].iloc[-1]}, 하단: {df['bb_bbl'].iloc[-1]}")
+
                 last_print_time = current_time
-
-            # 가격 히스토리 업데이트
-            price_data = {
-                'open': current_price,
-                'high': current_price,
-                'low': current_price,
-                'close': current_price,
-                'volume': 1  # 예시 볼륨 값
-            }
-            price_history.append(price_data)
-            if len(price_history) > max_history_length:
-                price_history.pop(0)
-            
-            # DataFrame 생성 및 지표 추가
-            df = pd.DataFrame(price_history)
-            df = add_indicators(df)
-
-            # 지표 출력
-            print(f"현재 RSI: {df['rsi'].iloc[-1]}")
-            print(f"현재 MACD: {df['macd'].iloc[-1]}, Signal: {df['macd_signal'].iloc[-1]}")
-            print(f"볼린저 밴드 상단: {df['bb_bbh'].iloc[-1]}, 중간: {df['bb_bbm'].iloc[-1]}, 하단: {df['bb_bbl'].iloc[-1]}")
 
             # 저항선 및 지지선 업데이트 후 변경 여부 확인
             new_resistance, new_support = update_resistance_support(current_price, resistance, support)
@@ -544,7 +545,7 @@ async def real_time_price_monitoring(resistance, support, stop_event):
                 execute_sell_order(trade_amount / current_price)
                 print("매도 신호에 따라 매도를 실행합니다.")
 
-            await asyncio.sleep(1)  # 1초마다 체크  
+            await asyncio.sleep(1)  # 1초마다 체크 
 
 def start_real_time_monitoring(resistance, support, stop_event):
     asyncio.run(real_time_price_monitoring(resistance, support, stop_event))
