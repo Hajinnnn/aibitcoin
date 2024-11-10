@@ -490,8 +490,8 @@ async def real_time_price_monitoring(resistance, support, stop_event):
         # 최초 저항선과 지지선 출력
         print(f"최초 저항선: {resistance}, 최초 지지선: {support}")
 
-        # 10분 타이머 초기화
-        last_print_time = time.time()
+         # 10분 타이머 초기화 (즉시 첫 번째 출력을 위해 10분 전으로 설정)
+        last_print_time = time.time() - 600
 
         while not stop_event.is_set():
             data = await websocket.recv()
