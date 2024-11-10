@@ -531,13 +531,19 @@ async def real_time_price_monitoring(resistance, support, stop_event):
 
                         last_print_time = current_time
 
-                    # 저항선 및 지지선 업데이트 후 변경 여부 확인
+                    # 저항선 및 지지선 업데이트 후 매매 신호 확인
                     new_resistance, new_support = update_resistance_support(current_price, resistance, support)
-                    if new_resistance != resistance:
-                        print(f"**저항선이 업데이트되었습니다: {new_resistance}**")
+                    if current_price > resistance:  # 저항선 돌파 시 매수
+                        print("저항선 돌파: 매수 주문을 실행합니다.")
+                        krw_balance = get_krw_balance()
+                        trade_amount = calculate_trade_amount(krw_balance, risk_percentage=10)
+                        execute_buy_order(trade_amount)
                         resistance = new_resistance
-                    if new_support != support:
-                        print(f"**지지선이 업데이트되었습니다: {new_support}**")
+                    elif current_price < support:  # 지지선 붕괴 시 매도
+                        print("지지선 붕괴: 매도 주문을 실행합니다.")
+                        btc_balance = get_btc_balance()
+                        trade_amount = calculate_trade_amount(btc_balance * current_price, risk_percentage=10)
+                        execute_sell_order(trade_amount / current_price)
                         support = new_support
 
                     # 매매 신호 확인
@@ -545,27 +551,19 @@ async def real_time_price_monitoring(resistance, support, stop_event):
                         krw_balance = get_krw_balance()
                         trade_amount = calculate_trade_amount(krw_balance, risk_percentage=5)
                         execute_buy_order(trade_amount)
-                        print("매수 신호에 따라 매수를 실행합니다.")
+                        print("기술 지표 기반 매수 신호: 매수 주문을 실행합니다.")
                     elif is_sell_signal(df):
                         btc_balance = get_btc_balance()
                         trade_amount = calculate_trade_amount(btc_balance * current_price, risk_percentage=5)
                         execute_sell_order(trade_amount / current_price)
-                        print("매도 신호에 따라 매도를 실행합니다.")
+                        print("기술 지표 기반 매도 신호: 매도 주문을 실행합니다.")
 
+                    resistance, support = new_resistance, new_support
                     await asyncio.sleep(1)  # 1초마다 체크
 
         except websockets.exceptions.ConnectionClosedError as e:
             print(f"WebSocket 연결이 끊어졌습니다: {e}. 재연결을 시도합니다.")
-            retry_count += 1
-            if retry_count > 5:
-                print("재연결 시도가 5회를 초과했습니다. 모니터링을 종료합니다.")
-                break
             await asyncio.sleep(5)  # 재연결 전 대기 시간
-        except Exception as e:
-            print(f"예기치 못한 오류가 발생했습니다: {e}")
-            break  # 예기치 못한 오류 발생 시 루프 종료
-
-    print("실시간 가격 모니터링을 종료합니다.") 
 
 def start_real_time_monitoring(resistance, support, stop_event):
     asyncio.run(real_time_price_monitoring(resistance, support, stop_event))
