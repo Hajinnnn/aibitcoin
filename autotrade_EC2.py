@@ -219,23 +219,19 @@ def get_bitcoin_news():
 #### Selenium 관련 함수
 
 def create_driver():
-    env = os.getenv("ENVIRONMENT")
     logger.info("ChromeDriver 설정 중...")
-    chrome_options = Options()
-    chrome_options.add_argument("--headless")
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
-    chrome_options.add_argument("--disable-gpu")
     try:
-        if env == "local":
-            chrome_options.add_experimental_option('excludeSwitches', ['enable-logging'])
-            from webdriver_manager.chrome import ChromeDriverManager
-            service = Service(ChromeDriverManager().install())
-        elif env == "ec2":
-            service = Service('/usr/bin/chromedriver')
-        else:
-            raise ValueError(f"Unsupported environment. Only local or ec2: {env}")
+        chrome_options = Options()
+        chrome_options.add_argument("--headless")  # 헤드리스 모드 사용
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--disable-dev-shm-usage")
+        chrome_options.add_argument("--disable-gpu")
+
+        service = Service('/usr/bin/chromedriver')  # Specify the path to the ChromeDriver executable
+
+        # Initialize the WebDriver with the specified options
         driver = webdriver.Chrome(service=service, options=chrome_options)
+
         return driver
     except Exception as e:
         logger.error(f"ChromeDriver 생성 중 오류 발생: {e}")
