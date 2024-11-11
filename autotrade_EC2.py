@@ -95,7 +95,8 @@ def calculate_performance(trades_df):
 # AI 모델을 사용하여 최근 투자 기록과 시장 데이터를 기반으로 분석 및 반성을 생성하는 함수
 def generate_reflection(trades_df, current_market_data):
     performance = calculate_performance(trades_df) # 투자 퍼포먼스 계산
-    
+    reduced_trades_df = trades_df.tail(5)  # 마지막 5개의 기록만 전송
+
     client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
     if not client.api_key:
         logger.error("OpenAI API key is missing or invalid.")
@@ -113,7 +114,7 @@ def generate_reflection(trades_df, current_market_data):
                 "role": "user",
                 "content": f"""
                 Recent trading data:
-                {trades_df.to_json(orient='records')}
+                {reduced_trades_df.to_json(orient='split')}
                 
                 Current market data:
                 {current_market_data}
@@ -216,6 +217,7 @@ def get_bitcoin_news():
 #         return ""
 
 #### Selenium 관련 함수
+
 def create_driver():
     env = os.getenv("ENVIRONMENT")
     logger.info("ChromeDriver 설정 중...")
