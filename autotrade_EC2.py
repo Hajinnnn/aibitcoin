@@ -236,7 +236,7 @@ def get_combined_transcript(video_id):
 #### Selenium 관련 함수
 def create_driver():
     env = os.getenv("ENVIRONMENT", "ec2")
-    logger.info("ChromeDriver 설정 중...")
+    logger.info(f"ChromeDriver 설정 중... ENVIRONMENT={env}")
     chrome_options = Options()
     chrome_options.add_argument("--headless")
     chrome_options.add_argument("--no-sandbox")
@@ -464,7 +464,7 @@ Fear and Greed Index: {json.dumps(fear_greed_index)}"""
             )
 
             # AI의 응답 파싱
-            ai_response = response['choices'][0]['message']['content']
+            ai_response = response.choices[0].message['content']
             try:
                 result = TradingDecision.parse_raw(ai_response)
             except Exception as e:
