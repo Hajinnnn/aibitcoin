@@ -3,7 +3,7 @@ from dotenv import load_dotenv
 import pyupbit
 import pandas as pd
 import json
-import openai  # 수정: OpenAI 라이브러리 임포트 방식 변경
+import openai
 import ta
 from ta.utils import dropna
 import time
@@ -24,7 +24,7 @@ from pydantic import BaseModel
 import sqlite3
 from datetime import datetime, timedelta
 import schedule
-import yfinance as yf  # 추가: yfinance 라이브러리 임포트
+import ccxt
 
 # .env 파일에 저장된 환경 변수를 불러오기 (API 키 등)
 load_dotenv()
@@ -46,6 +46,11 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 if not openai.api_key:
     logger.error("OpenAI API key is missing or invalid.")
     raise ValueError("Missing OpenAI API key. Please check your .env file.")
+
+# ccxt를 사용하여 거래소 인스턴스 생성
+exchange = ccxt.binance({
+    'enableRateLimit': True
+})
 
 # OpenAI 구조화된 출력 체크용 클래스
 class TradingDecision(BaseModel):
@@ -144,32 +149,32 @@ def generate_reflection(trades_df, current_market_data):
 # 데이터프레임에 보조 지표를 추가하는 함수
 def add_indicators(df):
     # 볼린저 밴드 추가
-    indicator_bb = ta.volatility.BollingerBands(close=df['Close'], window=20, window_dev=2)
+    indicator_bb = ta.volatility.BollingerBands(close=df['close'], window=20, window_dev=2)
     df['bb_bbm'] = indicator_bb.bollinger_mavg()
     df['bb_bbh'] = indicator_bb.bollinger_hband()
     df['bb_bbl'] = indicator_bb.bollinger_lband()
 
     # RSI (Relative Strength Index) 추가
-    df['rsi'] = ta.momentum.RSIIndicator(close=df['Close'], window=14).rsi()
+    df['rsi'] = ta.momentum.RSIIndicator(close=df['close'], window=14).rsi()
 
     # MACD (Moving Average Convergence Divergence) 추가
-    macd = ta.trend.MACD(close=df['Close'])
+    macd = ta.trend.MACD(close=df['close'])
     df['macd'] = macd.macd()
     df['macd_signal'] = macd.macd_signal()
     df['macd_diff'] = macd.macd_diff()
 
     # 이동평균선 추가 (20일, 50일, 120일, 200일)
-    df['sma_20'] = ta.trend.SMAIndicator(close=df['Close'], window=20).sma_indicator()
-    df['sma_50'] = ta.trend.SMAIndicator(close=df['Close'], window=50).sma_indicator()
-    df['sma_120'] = ta.trend.SMAIndicator(close=df['Close'], window=120).sma_indicator()
-    df['sma_200'] = ta.trend.SMAIndicator(close=df['Close'], window=200).sma_indicator()
+    df['sma_20'] = ta.trend.SMAIndicator(close=df['close'], window=20).sma_indicator()
+    df['sma_50'] = ta.trend.SMAIndicator(close=df['close'], window=50).sma_indicator()
+    df['sma_120'] = ta.trend.SMAIndicator(close=df['close'], window=120).sma_indicator()
+    df['sma_200'] = ta.trend.SMAIndicator(close=df['close'], window=200).sma_indicator()
 
     # MFI (Money Flow Index) 추가
     df['mfi'] = ta.volume.MFIIndicator(
-        high=df['High'],
-        low=df['Low'],
-        close=df['Close'],
-        volume=df['Volume'],
+        high=df['high'],
+        low=df['low'],
+        close=df['close'],
+        volume=df['volume'],
         window=14
     ).money_flow_index()
 
@@ -322,6 +327,19 @@ def capture_and_encode_screenshot(driver):
         logger.error(f"스크린샷 캡처 및 인코딩 중 오류 발생: {e}")
         return None
 
+### ccxt를 사용하여 데이터 가져오는 함수 추가
+def fetch_data(symbol, timeframe, limit):
+    try:
+        ohlcv = exchange.fetch_ohlcv(symbol, timeframe=timeframe, limit=limit)
+        df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+        df.set_index('timestamp', inplace=True)
+        df = dropna(df)
+        return df
+    except Exception as e:
+        logger.error(f"Error fetching data from ccxt: {e}")
+        return pd.DataFrame()
+
 ### 메인 AI 트레이딩 로직
 def ai_trading():
     global upbit
@@ -333,15 +351,13 @@ def ai_trading():
     # 2. 오더북(호가 데이터) 조회
     orderbook = pyupbit.get_orderbook("KRW-BTC")
 
-    # 3. 차트 데이터 조회 및 보조지표 추가 (USD 기준으로 변경)
+    # 3. 차트 데이터 조회 및 보조지표 추가 (ccxt 사용)
     # Daily 데이터 가져오기
-    df_daily = yf.download('BTC-USD', period='200d', interval='1d')
-    df_daily = dropna(df_daily)
+    df_daily = fetch_data('BTC/USDT', '1d', 200)
     df_daily = add_indicators(df_daily)
 
     # Hourly 데이터 가져오기
-    df_hourly = yf.download('BTC-USD', period='7d', interval='60m')
-    df_hourly = dropna(df_hourly)
+    df_hourly = fetch_data('BTC/USDT', '1h', 168)  # 7일치 시간봉 데이터
     df_hourly = add_indicators(df_hourly)
 
     # 4. 공포 탐욕 지수 가져오기
@@ -385,7 +401,7 @@ def ai_trading():
             # 최근 거래 내역 가져오기
             recent_trades = get_recent_trades(conn)
 
-            # 현재 시장 데이터 수집 (기존 코드에서 가져온 데이터 사용)
+            # 현재 시장 데이터 수집
             current_market_data = {
                 "fear_greed_index": fear_greed_index,
                 "news_headlines": news_headlines,
