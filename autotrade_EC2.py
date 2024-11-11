@@ -3,7 +3,7 @@ from dotenv import load_dotenv
 import pyupbit
 import pandas as pd
 import json
-import openai
+from openai import OpenAI
 import ta
 from ta.utils import dropna
 import time
@@ -40,12 +40,6 @@ if not access or not secret:
     logger.error("API keys not found. Please check your .env file.")
     raise ValueError("Missing API keys. Please check your .env file.")
 upbit = pyupbit.Upbit(access, secret)
-
-# OpenAI API 키 설정
-openai.api_key = os.getenv("OPENAI_API_KEY")
-if not openai.api_key:
-    logger.error("OpenAI API key is missing or invalid.")
-    raise ValueError("Missing OpenAI API key. Please check your .env file.")
 
 # ccxt를 사용하여 거래소 인스턴스 생성
 exchange = ccxt.binance({
@@ -108,9 +102,14 @@ def calculate_performance(trades_df):
 def generate_reflection(trades_df, current_market_data):
     performance = calculate_performance(trades_df)  # 투자 퍼포먼스 계산
 
+    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    if not client.api_key:
+        logger.error("OpenAI API key is missing or invalid.")
+        return None
+
     # OpenAI API 호출로 AI의 반성 일기 및 개선 사항 생성 요청
     try:
-        response = openai.ChatCompletion.create(
+        response = client.chat.completions.create(
             model="gpt-4o-2024-08-06",
             messages=[
                 {
@@ -395,6 +394,10 @@ def ai_trading():
             driver.quit()
 
     ### AI에게 데이터 제공하고 판단 받기
+    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    if not client.api_key:
+        logger.error("OpenAI API key is missing or invalid.")
+        return None
     try:
         # 데이터베이스 연결
         with sqlite3.connect('bitcoin_trades.db') as conn:
@@ -414,7 +417,7 @@ def ai_trading():
             reflection = generate_reflection(recent_trades, current_market_data)
 
             # AI 모델에 반성 내용 제공
-            response = openai.ChatCompletion.create(
+            response = client.chat.completions.create(
                 model="gpt-4o-2024-08-06",
                 messages=[
                     {
