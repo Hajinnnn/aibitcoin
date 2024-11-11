@@ -26,8 +26,6 @@ from datetime import datetime, timedelta
 import schedule
 import ccxt
 
-env = os.getenv("ENVIRONMENT", "ec2")
-
 # .env 파일에 저장된 환경 변수를 불러오기 (API 키 등)
 load_dotenv()
 
@@ -142,7 +140,7 @@ def generate_reflection(trades_df, current_market_data):
             ]
         )
 
-        response_content = response.choices[0].message.content
+        response_content = response.choices[0].message["content"]
         return response_content
     except Exception as e:
         logger.error(f"Error generating reflection: {e}")
@@ -237,7 +235,7 @@ def get_combined_transcript(video_id):
 
 #### Selenium 관련 함수
 def create_driver():
-    env = os.getenv("ENVIRONMENT")
+    env = os.getenv("ENVIRONMENT", "ec2")
     logger.info("ChromeDriver 설정 중...")
     chrome_options = Options()
     chrome_options.add_argument("--headless")
