@@ -78,6 +78,9 @@ def calculate_performance(trades_df):
 def generate_reflection(trades_df, current_market_data):
     performance = calculate_performance(trades_df)
     
+    # 최근 거래 데이터 요약 (최신 5개만 추출하고 필요한 열만 선택)
+    recent_trades_summary = trades_df[['timestamp', 'decision', 'percentage', 'reason']].tail(5).to_json(orient='records')
+    
     client = OpenAI()
     response = client.chat.completions.create(
         model="gpt-4o",
@@ -89,8 +92,8 @@ def generate_reflection(trades_df, current_market_data):
             {
                 "role": "user",
                 "content": f"""
-                Recent trading data:
-                {trades_df.to_json(orient='records')}
+                Recent trading data summary:
+                {recent_trades_summary}
                 
                 Current market data:
                 {current_market_data}
