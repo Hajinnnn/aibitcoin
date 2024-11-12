@@ -28,6 +28,7 @@ import sqlite3
 from datetime import datetime, timedelta
 import schedule
 import ccxt
+import pytz
 
 class TradingDecision(BaseModel):
     decision: str
@@ -53,11 +54,12 @@ def init_db():
 
 def log_trade(conn, decision, percentage, reason, btc_balance, krw_balance, btc_avg_buy_price, btc_krw_price, reflection=''):
     c = conn.cursor()
+    ny_time = datetime.now(pytz.timezone('America/New_York')).isoformat()  # 모듈 이름 사용
     timestamp = datetime.now().isoformat()
     c.execute("""INSERT INTO trades 
                  (timestamp, decision, percentage, reason, btc_balance, krw_balance, btc_avg_buy_price, btc_krw_price, reflection) 
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-              (timestamp, decision, percentage, reason, btc_balance, krw_balance, btc_avg_buy_price, btc_krw_price, reflection))
+              (ny_time, decision, percentage, reason, btc_balance, krw_balance, btc_avg_buy_price, btc_krw_price, reflection))
     conn.commit()
 
 def get_recent_trades(conn, days=7):
