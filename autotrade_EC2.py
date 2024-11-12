@@ -368,9 +368,6 @@ def ai_trading():
     df_usd_hourly = dropna(df_usd_hourly)
     df_usd_hourly = add_indicators(df_usd_hourly)  # USD 시간봉 데이터에 지표 추가
 
-    # USD 데이터에 보조지표 추가
-    df_usd = add_indicators(df_usd)
-
     # 5. 공포 탐욕 지수 가져오기
     fear_greed_index = get_fear_and_greed_index()
 
