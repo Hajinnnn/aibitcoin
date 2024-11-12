@@ -27,6 +27,7 @@ from openai import OpenAI
 import sqlite3
 from datetime import datetime, timedelta
 import schedule
+import ccxt
 
 class TradingDecision(BaseModel):
     decision: str
@@ -136,6 +137,15 @@ def add_indicators(df):
     # RSI
     df['rsi'] = ta.momentum.RSIIndicator(close=df['close'], window=14).rsi()
     
+    # MFI
+    df['mfi'] = ta.volume.MFIIndicator(
+        high=df['high'],
+        low=df['low'],
+        close=df['close'],
+        volume=df['volume'],
+        window=14
+    ).money_flow_index()
+
     # MACD
     macd = ta.trend.MACD(close=df['close'])
     df['macd'] = macd.macd()
@@ -143,8 +153,10 @@ def add_indicators(df):
     df['macd_diff'] = macd.macd_diff()
     
     # 이동평균선
-    df['sma_20'] = ta.trend.SMAIndicator(close=df['close'], window=20).sma_indicator()
-    df['ema_12'] = ta.trend.EMAIndicator(close=df['close'], window=12).ema_indicator()
+    df['ema_20'] = ta.trend.EMAIndicator(close=df['close'], window=20).ema_indicator()
+    df['ema_50'] = ta.trend.EMAIndicator(close=df['close'], window=50).ema_indicator()
+    df['ema_120'] = ta.trend.EMAIndicator(close=df['close'], window=120).ema_indicator()
+    df['ema_200'] = ta.trend.EMAIndicator(close=df['close'], window=200).ema_indicator()
     
     return df
 
@@ -336,13 +348,36 @@ def ai_trading():
     df_hourly = dropna(df_hourly)
     df_hourly = add_indicators(df_hourly)
 
-    # 4. 공포 탐욕 지수 가져오기
+    # 4. ccxt로 USD-BTC 데이터 가져오기 (Kraken)
+    kraken = ccxt.kraken()
+    ohlcv_usd = kraken.fetch_ohlcv("BTC/USD", timeframe='1d', limit=30)
+    
+    # USD 일봉 데이터
+    ohlcv_usd_daily = kraken.fetch_ohlcv("BTC/USD", timeframe='1d', limit=30)
+    df_usd_daily = pd.DataFrame(ohlcv_usd_daily, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+    df_usd_daily['timestamp'] = pd.to_datetime(df_usd_daily['timestamp'], unit='ms')
+    df_usd_daily.set_index('timestamp', inplace=True)
+    df_usd_daily = dropna(df_usd_daily)
+    df_usd_daily = add_indicators(df_usd_daily)  # USD 일봉 데이터에 지표 추가
+
+    # USD 시간봉 데이터
+    ohlcv_usd_hourly = kraken.fetch_ohlcv("BTC/USD", timeframe='1h', limit=24)
+    df_usd_hourly = pd.DataFrame(ohlcv_usd_hourly, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+    df_usd_hourly['timestamp'] = pd.to_datetime(df_usd_hourly['timestamp'], unit='ms')
+    df_usd_hourly.set_index('timestamp', inplace=True)
+    df_usd_hourly = dropna(df_usd_hourly)
+    df_usd_hourly = add_indicators(df_usd_hourly)  # USD 시간봉 데이터에 지표 추가
+
+    # USD 데이터에 보조지표 추가
+    df_usd = add_indicators(df_usd)
+
+    # 5. 공포 탐욕 지수 가져오기
     fear_greed_index = get_fear_and_greed_index()
 
-    # 5. 뉴스 헤드라인 가져오기
+    # 6. 뉴스 헤드라인 가져오기
     news_headlines = get_bitcoin_news()
 
-    # 6. YouTube 자막 데이터 가져오기
+    # 7. YouTube 자막 데이터 가져오기
     # # 로컬용
     # youtube_transcript = get_combined_transcript("3XbtEX3jUv4")  # 여기에 실제 비트코인 관련 YouTube 영상 ID를 넣으세요
     
@@ -388,7 +423,9 @@ def ai_trading():
         "news_headlines": news_headlines,
         "orderbook": orderbook,
         "daily_ohlcv": df_daily.to_dict(),
-        "hourly_ohlcv": df_hourly.to_dict()
+        "hourly_ohlcv": df_hourly.to_dict(),
+        "daily_ohlcv_usd": df_usd_daily.to_dict(),  # USD 일봉 데이터
+        "hourly_ohlcv_usd": df_usd_hourly.to_dict()  # USD 시간봉 데이터
     }
     
     # 반성 및 개선 내용 생성
@@ -402,7 +439,7 @@ def ai_trading():
                 "role": "system",
                 "content": f"""You are an expert in Bitcoin investing. Analyze the provided data and determine whether to buy, sell, or hold at the current moment. Consider the following in your analysis:
 
-                - Technical indicators and market data
+                - Technical indicators and market data (both KRW-BTC and USD-BTC)
                 - Recent news headlines and their potential impact on Bitcoin price
                 - The Fear and Greed Index and its implications
                 - Overall market sentiment
@@ -437,6 +474,8 @@ def ai_trading():
         Orderbook: {json.dumps(orderbook)}
         Daily OHLCV with indicators (30 days): {df_daily.to_json()}
         Hourly OHLCV with indicators (24 hours): {df_hourly.to_json()}
+        Daily OHLCV with indicators (USD-BTC): {df_usd_daily.to_json()}
+        Hourly OHLCV with indicators (USD-BTC): {df_usd_hourly.to_json()}
         Recent news headlines: {json.dumps(news_headlines)}
         Fear and Greed Index: {json.dumps(fear_greed_index)}"""
                     }
