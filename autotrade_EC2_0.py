@@ -41,12 +41,14 @@ def init_db():
     c.execute('''CREATE TABLE IF NOT EXISTS trades
                  (id INTEGER PRIMARY KEY AUTOINCREMENT,
                   timestamp TEXT,
+                  reason TEXT,
                   decision TEXT,
                   percentage INTEGER,
                   btc_balance REAL,
                   krw_balance REAL,
                   btc_avg_buy_price REAL,
-                  btc_krw_price REAL)''')
+                  btc_krw_price REAL,
+                  reflection TEXT)''')
     conn.commit()
     return conn
 
@@ -170,50 +172,6 @@ def get_fear_and_greed_index():
         logger.error(f"Failed to fetch Fear and Greed Index. Status code: {response.status_code}")
         return None
 
-# def get_bitcoin_news():
-#     serpapi_key = os.getenv("SERPAPI_API_KEY")
-#     url = "https://serpapi.com/search.json"
-#     params = {
-#         "engine": "google_news",
-#         "q": "btc",
-#         "api_key": serpapi_key
-#     }
-    
-#     try:
-#         response = requests.get(url, params=params)
-#         response.raise_for_status()
-#         data = response.json()
-        
-#         news_results = data.get("news_results", [])
-#         headlines = []
-#         for item in news_results:
-#             headlines.append({
-#                 "title": item.get("title", ""),
-#                 "date": item.get("date", "")
-#             })
-        
-#         return headlines[:5]
-#     except requests.RequestException as e:
-#         logger.error(f"Error fetching news: {e}")
-#         return []
-
-# # 로컬용
-# def setup_chrome_options():
-#     chrome_options = Options()
-#     chrome_options.add_argument("--start-maximized")
-#     chrome_options.add_argument("--headless")  # 디버깅을 위해 헤드리스 모드 비활성화
-#     chrome_options.add_argument("--disable-gpu")
-#     chrome_options.add_argument("--no-sandbox")
-#     chrome_options.add_argument("--disable-dev-shm-usage")
-#     chrome_options.add_experimental_option('excludeSwitches', ['enable-logging'])
-#     return chrome_options
-
-# def create_driver():
-#     logger.info("ChromeDriver 설정 중...")
-#     service = Service(ChromeDriverManager().install())
-#     driver = webdriver.Chrome(service=service, options=setup_chrome_options())
-#     return driver
-
 # # EC2 서버용
 # def create_driver():
 #     logger.info("ChromeDriver 설정 중...")
@@ -233,7 +191,6 @@ def get_fear_and_greed_index():
 #     except Exception as e:
 #         logger.error(f"ChromeDriver 생성 중 오류 발생: {e}")
 #         raise
-
 
 # def click_element_by_xpath(driver, xpath, element_name, wait_time=10):
 #     try:
@@ -317,15 +274,6 @@ def get_fear_and_greed_index():
 #         logger.error(f"스크린샷 캡처 및 인코딩 중 오류 발생: {e}")
 #         return None, None
 
-# def get_combined_transcript(video_id):
-#     try:
-#         transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=['ko'])
-#         combined_text = ' '.join(entry['text'] for entry in transcript)
-#         return combined_text
-#     except Exception as e:
-#         logger.error(f"Error fetching YouTube transcript: {e}")
-#         return ""
-
 def ai_trading():
     # Upbit 객체 생성
     access = os.getenv("UPBIT_ACCESS_KEY")
@@ -371,12 +319,7 @@ def ai_trading():
     # 5. 공포 탐욕 지수 가져오기
     fear_greed_index = get_fear_and_greed_index()
 
-    # # 6. 뉴스 헤드라인 가져오기
-    # news_headlines = get_bitcoin_news()
-
     # 7. YouTube 자막 데이터 가져오기
-    # # 로컬용
-    # youtube_transcript = get_combined_transcript("3XbtEX3jUv4")  # 여기에 실제 비트코인 관련 YouTube 영상 ID를 넣으세요
     
     # EC2 서버용
     f = open("strategy.txt", "r", encoding="utf-8") # 직접 저장한 텍스트를 넣어주기
@@ -417,7 +360,6 @@ def ai_trading():
     # 현재 시장 데이터 수집 (기존 코드에서 가져온 데이터 사용)
     current_market_data = {
         "fear_greed_index": fear_greed_index,
-        # "news_headlines": news_headlines,
         "orderbook": orderbook,
         "daily_ohlcv": df_daily.to_dict(),
         "hourly_ohlcv": df_hourly.to_dict(),
@@ -435,7 +377,6 @@ def ai_trading():
             {
                 "role": "system",
                 "content": f"""You are an expert in Bitcoin investing. Analyze the provided data and determine whether to buy, sell, or hold at the current moment. Consider the following in your analysis:
-
                 - Technical indicators and market data (both KRW-BTC and USD-BTC)
                 - The Fear and Greed Index and its implications
                 - Overall market sentiment
