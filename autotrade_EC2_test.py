@@ -303,6 +303,20 @@ def ai_trading():
         "btc_proportion": btc_proportion
     }
 
+     # 차트 이미지를 미리 캡처하여 재사용
+    imgbb_api_key = os.getenv("IMGBB_API_KEY")
+    krw_btc_chart_url = "https://upbit.com/full_chart?code=CRIX.UPBIT.KRW-BTC"
+    usd_btc_chart_url = "https://upbit.com/full_chart?code=CRIX.UPBIT.USDT-BTC"
+    
+    # 캡처된 이미지 URL을 저장하여 중복 호출 방지
+    krw_btc_chart_image_url = capture_chart_image(krw_btc_chart_url, imgbb_api_key)
+    usd_btc_chart_image_url = capture_chart_image(usd_btc_chart_url, imgbb_api_key)
+
+    # 차트 이미지 캡처 후 결과가 없다면 함수 종료
+    if not krw_btc_chart_image_url or not usd_btc_chart_image_url:
+        logger.error("차트 이미지 URL 생성 실패. 트레이딩 종료.")
+        return
+
     # 2. 오더북(호가 데이터) 조회
     orderbook = pyupbit.get_orderbook("KRW-BTC")
     
@@ -345,23 +359,9 @@ def ai_trading():
     with open("strategy.txt", "r", encoding="utf-8") as f:
         youtube_transcript = f.read()
 
-    # 8. Selenium으로 차트 캡처
-    imgbb_api_key = os.getenv("IMGBB_API_KEY")  # .env 파일에 imgbb API 키 추가
-    krw_btc_chart_url = "https://upbit.com/full_chart?code=CRIX.UPBIT.KRW-BTC"
-    usd_btc_chart_url = "https://upbit.com/full_chart?code=CRIX.UPBIT.USDT-BTC"
-    krw_btc_chart_image_url = capture_chart_image(krw_btc_chart_url, imgbb_api_key)
-    usd_btc_chart_image_url = capture_chart_image(usd_btc_chart_url, imgbb_api_key)
-
-    # AI에게 데이터 제공하고 판단 받기
-    client = OpenAI()
-
     # 데이터베이스 연결
     conn = get_db_connection()
-    
-    # 최근 거래 내역 가져오기
     recent_trades = get_recent_trades(conn)
-    
-    # 현재 시장 데이터 수집 (기존 코드에서 가져온 데이터 사용)
     current_market_data = {
         "fear_greed_index": fear_greed_index,
         #"news_headlines": news_headlines,
@@ -375,16 +375,8 @@ def ai_trading():
     # 반성 및 개선 내용 생성
     reflection = generate_reflection(recent_trades, current_market_data)
     
-    imgbb_api_key = os.getenv("IMGBB_API_KEY")  # .env 파일에 imgbb API 키 추가
-    krw_btc_chart_url = "https://upbit.com/full_chart?code=CRIX.UPBIT.KRW-BTC"
-    usd_btc_chart_url = "https://upbit.com/full_chart?code=CRIX.UPBIT.USDT-BTC"
-
-    # 차트 이미지 URL 생성
-    krw_btc_chart_image_url = capture_chart_image(krw_btc_chart_url, imgbb_api_key)
-    usd_btc_chart_image_url = capture_chart_image(usd_btc_chart_url, imgbb_api_key)
-
-
     # AI 모델에 반성 내용 제공
+    client = OpenAI()
     response = client.chat.completions.create(
         model="gpt-4o-2024-08-06",
         messages=[
