@@ -199,134 +199,104 @@ def get_bitcoin_news():
         logger.error(f"Error fetching news: {e}")
         return []
 
-# # 로컬용
-# def setup_chrome_options():
-#     chrome_options = Options()
-#     chrome_options.add_argument("--start-maximized")
-#     chrome_options.add_argument("--headless")  # 디버깅을 위해 헤드리스 모드 비활성화
-#     chrome_options.add_argument("--disable-gpu")
-#     chrome_options.add_argument("--no-sandbox")
-#     chrome_options.add_argument("--disable-dev-shm-usage")
-#     chrome_options.add_experimental_option('excludeSwitches', ['enable-logging'])
-#     return chrome_options
+# ChromeDriver 설정 (EC2 서버용)
+def create_driver():
+    logger.info("ChromeDriver 설정 중...")
+    try:
+        chrome_options = Options()
+        chrome_options.add_argument("--headless")  # 헤드리스 모드 사용
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--disable-dev-shm-usage")
+        chrome_options.add_argument("--disable-gpu")
 
-# def create_driver():
-#     logger.info("ChromeDriver 설정 중...")
-#     service = Service(ChromeDriverManager().install())
-#     driver = webdriver.Chrome(service=service, options=setup_chrome_options())
-#     return driver
+        service = Service('/usr/bin/chromedriver')  # Specify the path to the ChromeDriver executable
 
-# # EC2 서버용
-# def create_driver():
-#     logger.info("ChromeDriver 설정 중...")
-#     try:
-#         chrome_options = Options()
-#         chrome_options.add_argument("--headless")  # 헤드리스 모드 사용
-#         chrome_options.add_argument("--no-sandbox")
-#         chrome_options.add_argument("--disable-dev-shm-usage")
-#         chrome_options.add_argument("--disable-gpu")
+        # Initialize the WebDriver with the specified options
+        driver = webdriver.Chrome(service=service, options=chrome_options)
 
-#         service = Service('/usr/bin/chromedriver')  # Specify the path to the ChromeDriver executable
+        return driver
+    except Exception as e:
+        logger.error(f"ChromeDriver 생성 중 오류 발생: {e}")
+        raise
 
-#         # Initialize the WebDriver with the specified options
-#         driver = webdriver.Chrome(service=service, options=chrome_options)
+# 스크린샷 캡처 및 인코딩
+def capture_and_encode_screenshot(driver):
+    try:
+        # 스크린샷 캡처
+        png = driver.get_screenshot_as_png()
+        
+        # PIL Image로 변환
+        img = Image.open(io.BytesIO(png))
+        
+        # 이미지 리사이즈 (OpenAI API 제한에 맞춤)
+        img.thumbnail((2000, 2000))
+        
+        # 이미지를 바이트로 변환
+        buffered = io.BytesIO()
+        img.save(buffered, format="PNG")
+        
+        # base64로 인코딩
+        base64_image = base64.b64encode(buffered.getvalue()).decode('utf-8')
+        
+        return base64_image
+    except Exception as e:
+        logger.error(f"스크린샷 캡처 및 인코딩 중 오류 발생: {e}")
+        return None, None
 
-#         return driver
-#     except Exception as e:
-#         logger.error(f"ChromeDriver 생성 중 오류 발생: {e}")
-#         raise
+# 이미지 업로드
+def upload_image_to_imgbb(base64_image, api_key):
+    url = "https://api.imgbb.com/1/upload"
+    payload = {
+        "key": api_key,
+        "image": base64_image
+    }
+    response = requests.post(url, data=payload)
+    if response.status_code == 200:
+        return response.json()["data"]["url"]
+    else:
+        logger.error(f"Image upload failed: {response.json()}")
+        return None
 
+# 차트 이미지 캡처 및 URL 생성
+def capture_chart_image(url, imgbb_api_key):
+    driver = None
+    try:
+        driver = create_driver()
+        driver.get(url)
+        logger.info(f"{url} 페이지 로드 완료")
+        time.sleep(5)
+        logger.info("차트 작업 완료")
+        base64_image = capture_and_encode_screenshot(driver)
+        if base64_image:
+            image_url = upload_image_to_imgbb(base64_image, imgbb_api_key)
+            if image_url:
+                logger.info("이미지 업로드 및 URL 생성 완료.")
+                return image_url
+        return None
+    except Exception as e:
+        logger.error(f"차트 캡처 중 오류 발생: {e}")
+        return None
+    finally:
+        if driver:
+            driver.quit()
 
-# def click_element_by_xpath(driver, xpath, element_name, wait_time=10):
-#     try:
-#         element = WebDriverWait(driver, wait_time).until(
-#             EC.presence_of_element_located((By.XPATH, xpath))
-#         )
-#         # 요소가 뷰포트에 보일 때까지 스크롤
-#         driver.execute_script("arguments[0].scrollIntoView(true);", element)
-#         # 요소가 클릭 가능할 때까지 대기
-#         element = WebDriverWait(driver, wait_time).until(
-#             EC.element_to_be_clickable((By.XPATH, xpath))
-#         )
-#         element.click()
-#         logger.info(f"{element_name} 클릭 완료")
-#         time.sleep(2)  # 클릭 후 잠시 대기
-#     except TimeoutException:
-#         logger.error(f"{element_name} 요소를 찾는 데 시간이 초과되었습니다.")
-#     except ElementClickInterceptedException:
-#         logger.error(f"{element_name} 요소를 클릭할 수 없습니다. 다른 요소에 가려져 있을 수 있습니다.")
-#     except NoSuchElementException:
-#         logger.error(f"{element_name} 요소를 찾을 수 없습니다.")
-#     except Exception as e:
-#         logger.error(f"{element_name} 클릭 중 오류 발생: {e}")
-
-# def perform_chart_actions(driver):
-#     # 시간 메뉴 클릭
-#     click_element_by_xpath(
-#         driver,
-#         "/html/body/div[1]/div[2]/div[3]/span/div/div/div[1]/div/div/cq-menu[1]",
-#         "시간 메뉴"
-#     )
+# BTC와 KRW 비중에 따른 매수/매도 비율 조정 함수
+def adjust_trade_percentage(btc_proportion, krw_proportion, decision, base_percentage):
+    """
+    Adjust the buy/sell percentage based on BTC and KRW proportions.
+    - If selling, increase the percentage based on BTC proportion.
+    - If buying, increase the percentage based on KRW proportion.
+    """
+    adjusted_percentage = base_percentage
+    if decision == "sell":
+        # BTC 비중이 높을수록 매도 비율 증가
+        adjusted_percentage += int(btc_proportion * 50)  # 최대 50%까지 추가 매도
+    elif decision == "buy":
+        # KRW 비중이 높을수록 매수 비율 증가
+        adjusted_percentage += int(krw_proportion * 50)  # 최대 50%까지 추가 매수
     
-#     # 1시간 옵션 선택
-#     click_element_by_xpath(
-#         driver,
-#         "/html/body/div[1]/div[2]/div[3]/span/div/div/div[1]/div/div/cq-menu[1]/cq-menu-dropdown/cq-item[8]",
-#         "1시간 옵션"
-#     )
-    
-#     # 지표 메뉴 클릭
-#     click_element_by_xpath(
-#         driver,
-#         "/html/body/div[1]/div[2]/div[3]/span/div/div/div[1]/div/div/cq-menu[3]",
-#         "지표 메뉴"
-#     )
-    
-#     # 볼린저 밴드 옵션 선택
-#     click_element_by_xpath(
-#         driver,
-#         "/html/body/div[1]/div[2]/div[3]/span/div/div/div[1]/div/div/cq-menu[3]/cq-menu-dropdown/cq-scroll/cq-studies/cq-studies-content/cq-item[15]",
-#         "볼린저 밴드 옵션"
-#     )
-
-# def capture_and_encode_screenshot(driver):
-#     try:
-#         # 스크린샷 캡처
-#         png = driver.get_screenshot_as_png()
-        
-#         # PIL Image로 변환
-#         img = Image.open(io.BytesIO(png))
-        
-#         # 이미지 리사이즈 (OpenAI API 제한에 맞춤)
-#         img.thumbnail((2000, 2000))
-        
-#         # 현재 시간을 파일명에 포함
-#         current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
-#         filename = f"upbit_chart_{current_time}.png"
-        
-#         # 현재 스크립트의 경로를 가져옴
-#         script_dir = os.path.dirname(os.path.abspath(__file__))
-        
-#         # 이미지를 바이트로 변환
-#         buffered = io.BytesIO()
-#         img.save(buffered, format="PNG")
-        
-#         # base64로 인코딩
-#         base64_image = base64.b64encode(buffered.getvalue()).decode('utf-8')
-        
-#         return base64_image
-#     except Exception as e:
-#         logger.error(f"스크린샷 캡처 및 인코딩 중 오류 발생: {e}")
-#         return None, None
-
-# def get_combined_transcript(video_id):
-#     try:
-#         transcript = YouTubeTranscriptApi.get_transcript(video_id, languages=['ko'])
-#         combined_text = ' '.join(entry['text'] for entry in transcript)
-#         return combined_text
-#     except Exception as e:
-#         logger.error(f"Error fetching YouTube transcript: {e}")
-#         return ""
+    # 비율을 100%로 제한
+    return min(adjusted_percentage, 100)
 
 def ai_trading():
     # Upbit 객체 생성
@@ -335,9 +305,36 @@ def ai_trading():
     upbit = pyupbit.Upbit(access, secret)
 
     # 1. 현재 투자 상태 조회
-    all_balances = upbit.get_balances()
-    filtered_balances = [balance for balance in all_balances if balance['currency'] in ['BTC', 'KRW']]
+    krw_balance = upbit.get_balance("KRW")
+    btc_balance = upbit.get_balance("KRW-BTC")
+    current_btc_price = pyupbit.get_current_price("KRW-BTC")
+    total_asset_value = krw_balance + btc_balance * current_btc_price
+
+    krw_proportion = krw_balance / total_asset_value if total_asset_value > 0 else 0
+    btc_proportion = (btc_balance * current_btc_price) / total_asset_value if total_asset_value > 0 else 0
+
+    investment_status = {
+        "krw_balance": krw_balance,
+        "btc_balance": btc_balance,
+        "total_asset_value": total_asset_value,
+        "krw_proportion": krw_proportion,
+        "btc_proportion": btc_proportion
+    }
+
+    # 차트 이미지를 미리 캡처하여 재사용
+    imgbb_api_key = os.getenv("IMGBB_API_KEY")
+    krw_btc_chart_url = "https://upbit.com/full_chart?code=CRIX.UPBIT.KRW-BTC"
+    usd_btc_chart_url = "https://upbit.com/full_chart?code=CRIX.UPBIT.USDT-BTC"
     
+    # 캡처된 이미지 URL을 저장하여 중복 호출 방지
+    krw_btc_chart_image_url = capture_chart_image(krw_btc_chart_url, imgbb_api_key)
+    usd_btc_chart_image_url = capture_chart_image(usd_btc_chart_url, imgbb_api_key)
+
+    # 차트 이미지 캡처 후 결과가 없다면 함수 종료
+    if not krw_btc_chart_image_url or not usd_btc_chart_image_url:
+        logger.error("차트 이미지 URL 생성 실패. 트레이딩 종료.")
+        return
+
     # 2. 오더북(호가 데이터) 조회
     orderbook = pyupbit.get_orderbook("KRW-BTC")
     
@@ -377,46 +374,12 @@ def ai_trading():
     news_headlines = get_bitcoin_news()
 
     # 7. YouTube 자막 데이터 가져오기
-    # # 로컬용
-    # youtube_transcript = get_combined_transcript("3XbtEX3jUv4")  # 여기에 실제 비트코인 관련 YouTube 영상 ID를 넣으세요
-    
-    # EC2 서버용
-    f = open("strategy.txt", "r", encoding="utf-8") # 직접 저장한 텍스트를 넣어주기
-    youtube_transcript = f.read()
-    f.close()
-
-    # # Selenium으로 차트 캡처
-    # driver = None
-    # try:
-    #     driver = create_driver()
-    #     driver.get("https://upbit.com/full_chart?code=CRIX.UPBIT.KRW-BTC")
-    #     logger.info("페이지 로드 완료")
-    #     time.sleep(5)  # 페이지 로딩 대기 시간 증가
-    #     logger.info("차트 작업 시작")
-    #     perform_chart_actions(driver)
-    #     logger.info("차트 작업 완료")
-    #     chart_image = capture_and_encode_screenshot(driver)
-    #     logger.info(f"스크린샷 캡처 완료.")
-    # except WebDriverException as e:
-    #     logger.error(f"WebDriver 오류 발생: {e}")
-    #     chart_image = None
-    # except Exception as e:
-    #     logger.error(f"차트 캡처 중 오류 발생: {e}")
-    #     chart_image = None
-    # finally:
-    #     if driver:
-    #         driver.quit()
-
-    # AI에게 데이터 제공하고 판단 받기
-    client = OpenAI()
+    with open("strategy.txt", "r", encoding="utf-8") as f:
+        youtube_transcript = f.read()
 
     # 데이터베이스 연결
     conn = get_db_connection()
-    
-    # 최근 거래 내역 가져오기
     recent_trades = get_recent_trades(conn)
-    
-    # 현재 시장 데이터 수집 (기존 코드에서 가져온 데이터 사용)
     current_market_data = {
         "fear_greed_index": fear_greed_index,
         "news_headlines": news_headlines,
@@ -431,6 +394,7 @@ def ai_trading():
     reflection = generate_reflection(recent_trades, current_market_data)
     
     # AI 모델에 반성 내용 제공
+    client = OpenAI()
     response = client.chat.completions.create(
         model="gpt-4o-2024-08-06",
         messages=[
@@ -444,6 +408,7 @@ def ai_trading():
                 - Overall market sentiment
                 - Patterns and trends visible in the chart image
                 - Recent trading performance and reflection
+                - The current proportion of BTC and KRW holdings, where a higher BTC proportion may suggest a conservative sell approach with an increased sell ratio, while a higher KRW proportion may indicate a buy approach with an increased buy ratio
 
                 Recent trading reflection:
                 {reflection}
@@ -466,25 +431,17 @@ def ai_trading():
             },
             {
                 "role": "user",
-                "content": [
-                    {
-                        "type": "text",
-                        "text": f"""Current investment status: {json.dumps(filtered_balances)}
-        Orderbook: {json.dumps(orderbook)}
-        Daily OHLCV with indicators (30 days): {df_daily.to_json()}
-        Hourly OHLCV with indicators (24 hours): {df_hourly.to_json()}
-        Daily OHLCV with indicators (USD-BTC): {df_usd_daily.to_json()}
-        Hourly OHLCV with indicators (USD-BTC): {df_usd_hourly.to_json()}
-        Recent news headlines: {json.dumps(news_headlines)}
-        Fear and Greed Index: {json.dumps(fear_greed_index)}"""
-                    }
-                    # {
-                    #     "type": "image_url",
-                    #     "image_url": {
-                    #         "url": f"data:image/png;base64,{chart_image}"
-                    #     }
-                    # }
-                ]
+                "content": f"""Current investment status: {json.dumps(investment_status)}
+                Orderbook: {json.dumps(orderbook)}
+                Daily OHLCV with indicators (30 days): {df_daily.to_json()}
+                Hourly OHLCV with indicators (24 hours): {df_hourly.to_json()}
+                Daily OHLCV with indicators (USD-BTC): {df_usd_daily.to_json()}
+                Hourly OHLCV with indicators (USD-BTC): {df_usd_hourly.to_json()}
+                Recent news headlines: {json.dumps(news_headlines)}
+                Fear and Greed Index: {json.dumps(fear_greed_index)}
+
+                ![KRW-BTC Chart]({krw_btc_chart_image_url})
+                ![USD-BTC Chart]({usd_btc_chart_image_url})"""
             }
         ],
         response_format={
@@ -515,11 +472,14 @@ def ai_trading():
 
     order_executed = False
 
+    # BTC와 KRW 비중에 따른 매수/매도 비율 조정
+    adjusted_percentage = adjust_trade_percentage(btc_proportion, krw_proportion, result.decision, result.percentage)
+
     if result.decision == "buy":
         my_krw = upbit.get_balance("KRW")
-        buy_amount = my_krw * (result.percentage / 100) * 0.9995  # 수수료 고려
+        buy_amount = my_krw * (adjusted_percentage / 100) * 0.9995  # 수수료 고려
         if buy_amount > 5000:
-            print(f"### Buy Order Executed: {result.percentage}% of available KRW ###")
+            print(f"### Buy Order Executed: {adjusted_percentage}% of available KRW ###")
             order = upbit.buy_market_order("KRW-BTC", buy_amount)
             if order:
                 order_executed = True
@@ -528,10 +488,10 @@ def ai_trading():
             print("### Buy Order Failed: Insufficient KRW (less than 5000 KRW) ###")
     elif result.decision == "sell":
         my_btc = upbit.get_balance("KRW-BTC")
-        sell_amount = my_btc * (result.percentage / 100)
+        sell_amount = my_btc * (adjusted_percentage / 100)
         current_price = pyupbit.get_current_price("KRW-BTC")
         if sell_amount * current_price > 5000:
-            print(f"### Sell Order Executed: {result.percentage}% of held BTC ###")
+            print(f"### Sell Order Executed: {adjusted_percentage}% of held BTC ###")
             order = upbit.sell_market_order("KRW-BTC", sell_amount)
             if order:
                 order_executed = True
