@@ -49,7 +49,9 @@ def main():
 
     # 거래 내역 표시
     st.header('거래 내역')
-    st.dataframe(df)
+    # 거래 내역에서 reason과 reflection 컬럼을 제거합니다
+    df_display = df.drop(columns=['reason', 'reflection'])
+    st.dataframe(df_display)
 
     # 거래 결정 분포
     st.header('거래 결정 분포')
