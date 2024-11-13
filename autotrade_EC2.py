@@ -43,12 +43,10 @@ def init_db():
                   timestamp TEXT,
                   decision TEXT,
                   percentage INTEGER,
-                  reason TEXT,
                   btc_balance REAL,
                   krw_balance REAL,
                   btc_avg_buy_price REAL,
-                  btc_krw_price REAL,
-                  reflection TEXT)''')
+                  btc_krw_price REAL)''')
     conn.commit()
     return conn
 
