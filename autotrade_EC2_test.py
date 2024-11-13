@@ -283,8 +283,9 @@ def capture_chart_image(url, imgbb_api_key):
 # BTC와 KRW 비중에 따른 매수/매도 비율 조정 함수
 def adjust_trade_percentage(btc_proportion, krw_proportion, decision, base_percentage):
     """
-    BTC와 KRW 비중에 따라 매수/매도 비율을 조정합니다.
-    BTC 비중이 높을수록 매도 비율을 증가시키고, KRW 비중이 높을수록 매수 비율을 증가시킵니다.
+    Adjust the buy/sell percentage based on BTC and KRW proportions.
+    - If selling, increase the percentage based on BTC proportion.
+    - If buying, increase the percentage based on KRW proportion.
     """
     adjusted_percentage = base_percentage
     if decision == "sell":
@@ -407,7 +408,7 @@ def ai_trading():
                 - Overall market sentiment
                 - Patterns and trends visible in the chart image
                 - Recent trading performance and reflection
-                - The proportion of current BTC and KRW holdings
+                - The current proportion of BTC and KRW holdings, where a higher BTC proportion may suggest a conservative sell approach with an increased sell ratio, while a higher KRW proportion may indicate a buy approach with an increased buy ratio
 
                 Recent trading reflection:
                 {reflection}
