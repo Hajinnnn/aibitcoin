@@ -376,7 +376,7 @@ def ai_trading():
                 "content": [
                     {
                         "type": "text",
-                        "text": f"""Current investment status: {json.dumps(filtered_balances)}
+                        "text": f"""Current investment status: BTC balance: {btc_balance} BTC, KRW balance: {krw_balance} KRW
         Orderbook: {json.dumps(orderbook)}
         BTC ratio: {btc_ratio}%
         KRW ratio: {krw_ratio}%
