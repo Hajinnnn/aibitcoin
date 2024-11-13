@@ -170,7 +170,7 @@ def get_fear_and_greed_index():
         logger.error(f"Failed to fetch Fear and Greed Index. Status code: {response.status_code}")
         return None
 
-# EC2 서버용
+# 차트 캡쳐
 def create_driver():
     logger.info("ChromeDriver 설정 중...")
     try:
@@ -196,58 +196,6 @@ def create_driver():
         logger.error(f"ChromeDriver 생성 중 오류 발생: {e}")
         raise
 
-def click_element_by_xpath(driver, xpath, element_name, wait_time=10):
-    try:
-        element = WebDriverWait(driver, wait_time).until(
-            EC.presence_of_element_located((By.XPATH, xpath))
-        )
-        # 요소가 뷰포트에 보일 때까지 스크롤
-        driver.execute_script("arguments[0].scrollIntoView(true);", element)
-        # 요소가 클릭 가능할 때까지 대기
-        element = WebDriverWait(driver, wait_time).until(
-            EC.element_to_be_clickable((By.XPATH, xpath))
-        )
-        element.click()
-        logger.info(f"{element_name} 클릭 완료")
-        time.sleep(2)  # 클릭 후 잠시 대기
-    except TimeoutException:
-        logger.error(f"{element_name} 요소를 찾는 데 시간이 초과되었습니다.")
-    except ElementClickInterceptedException:
-        logger.error(f"{element_name} 요소를 클릭할 수 없습니다. 다른 요소에 가려져 있을 수 있습니다.")
-    except NoSuchElementException:
-        logger.error(f"{element_name} 요소를 찾을 수 없습니다.")
-    except Exception as e:
-        logger.error(f"{element_name} 클릭 중 오류 발생: {e}")
-
-def perform_chart_actions(driver):
-    # 시간 메뉴 클릭
-    click_element_by_xpath(
-        driver,
-        "/html/body/div[1]/div[2]/div[3]/span/div/div/div[1]/div/div/cq-menu[1]",
-        "시간 메뉴"
-    )
-    
-    # 1시간 옵션 선택
-    click_element_by_xpath(
-        driver,
-        "/html/body/div[1]/div[2]/div[3]/span/div/div/div[1]/div/div/cq-menu[1]/cq-menu-dropdown/cq-item[8]",
-        "1시간 옵션"
-    )
-    
-    # 지표 메뉴 클릭
-    click_element_by_xpath(
-        driver,
-        "/html/body/div[1]/div[2]/div[3]/span/div/div/div[1]/div/div/cq-menu[3]",
-        "지표 메뉴"
-    )
-    
-    # 볼린저 밴드 옵션 선택
-    click_element_by_xpath(
-        driver,
-        "/html/body/div[1]/div[2]/div[3]/span/div/div/div[1]/div/div/cq-menu[3]/cq-menu-dropdown/cq-scroll/cq-studies/cq-studies-content/cq-item[15]",
-        "볼린저 밴드 옵션"
-    )
-
 def capture_and_encode_screenshot(driver):
     try:
         # 스크린샷 캡처
@@ -258,13 +206,6 @@ def capture_and_encode_screenshot(driver):
         
         # 이미지 리사이즈 (OpenAI API 제한에 맞춤)
         img.thumbnail((2000, 2000))
-        
-        # 현재 시간을 파일명에 포함
-        current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"upbit_chart_{current_time}.png"
-        
-        # 현재 스크립트의 경로를 가져옴
-        script_dir = os.path.dirname(os.path.abspath(__file__))
         
         # 이미지를 바이트로 변환
         buffered = io.BytesIO()
@@ -332,22 +273,31 @@ def ai_trading():
 
     # Selenium으로 차트 캡처
     driver = None
+    usd_chart_image = None
+    krw_chart_image = None
     try:
         driver = create_driver()
-        driver.get("https://upbit.com/full_chart?code=CRIX.UPBIT.KRW-BTC")
-        logger.info("페이지 로드 완료")
+        
+        # USD 차트 캡처
+        driver.get("https://upbit.com/full_chart?code=CRIX.UPBIT.USDT-BTC")
+        logger.info("USD 차트 페이지 로드 완료")
         time.sleep(5)  # 페이지 로딩 대기 시간 증가
-        logger.info("차트 작업 시작")
-        perform_chart_actions(driver)
-        logger.info("차트 작업 완료")
-        chart_image = capture_and_encode_screenshot(driver)
-        logger.info(f"스크린샷 캡처 완료.")
+        logger.info("USD 차트 캡처 시작")
+        usd_chart_image = capture_and_encode_screenshot(driver)
+        logger.info("USD 차트 캡처 완료")
+
+        # KRW 차트 캡처
+        driver.get("https://upbit.com/full_chart?code=CRIX.UPBIT.KRW-BTC")
+        logger.info("KRW 차트 페이지 로드 완료")
+        time.sleep(5)  # 페이지 로딩 대기 시간 증가
+        logger.info("KRW 차트 캡처 시작")
+        krw_chart_image = capture_and_encode_screenshot(driver)
+        logger.info("KRW 차트 캡처 완료")
+
     except WebDriverException as e:
         logger.error(f"WebDriver 오류 발생: {e}")
-        chart_image = None
     except Exception as e:
         logger.error(f"차트 캡처 중 오류 발생: {e}")
-        chart_image = None
     finally:
         if driver:
             driver.quit()
@@ -421,8 +371,14 @@ def ai_trading():
                     },
                     {
                         "type": "image_url",
-                        "image_url": {
-                            "url": f"data:image/png;base64,{chart_image}"
+                    "image_url": {
+                        "url": f"data:image/png;base64,{usd_chart_image}"
+                    }
+                },
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:image/png;base64,{krw_chart_image}"
                         }
                     }
                 ]
