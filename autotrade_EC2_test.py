@@ -180,16 +180,13 @@ def create_driver():
         chrome_options.add_argument("--disable-dev-shm-usage")
         chrome_options.add_argument("--disable-gpu")
 
-        # service = Service('/usr/bin/chromedriver')  # Specify the path to the ChromeDriver executable
+        service = Service('/usr/bin/chromedriver')  # Specify the path to the ChromeDriver executable
 
-        # # Initialize the WebDriver with the specified options
-        # driver = webdriver.Chrome(service=service, options=chrome_options)
+        # Initialize the WebDriver with the specified options
+        driver = webdriver.Chrome(service=service, options=chrome_options)
 
-        #  # webdriver-manager를 사용하여 ChromeDriver 자동 설치 및 버전 관리
-        # service = Service(ChromeDriverManager().install())
-
-        chromedriver_path = "/home/ubuntu/aibitcoin/chromedriver/linux-130.0.6723.116/chromedriver-linux64/chromedriver"
-        service = Service(executable_path=chromedriver_path)
+         # webdriver-manager를 사용하여 ChromeDriver 자동 설치 및 버전 관리
+        service = Service(ChromeDriverManager().install())
 
         # WebDriver 초기화
         driver = webdriver.Chrome(service=service, options=chrome_options)
