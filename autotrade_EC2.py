@@ -41,12 +41,14 @@ def init_db():
     c.execute('''CREATE TABLE IF NOT EXISTS trades
                  (id INTEGER PRIMARY KEY AUTOINCREMENT,
                   timestamp TEXT,
+                  reason TEXT,
                   decision TEXT,
                   percentage INTEGER,
                   btc_balance REAL,
                   krw_balance REAL,
                   btc_avg_buy_price REAL,
-                  btc_krw_price REAL)''')
+                  btc_krw_price REAL,
+                  reflection TEXT)''')
     conn.commit()
     return conn
 
