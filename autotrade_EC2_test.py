@@ -226,9 +226,23 @@ def ai_trading():
     upbit = pyupbit.Upbit(access, secret)
 
     # 1. 현재 투자 상태 조회
-    all_balances = upbit.get_balances()
-    filtered_balances = [balance for balance in all_balances if balance['currency'] in ['BTC', 'KRW']]
+    # all_balances = upbit.get_balances()
+    # filtered_balances = [balance for balance in all_balances if balance['currency'] in ['BTC', 'KRW']]
     
+    all_balances = upbit.get_balances()
+    btc_balance = next((float(balance['balance']) for balance in all_balances if balance['currency'] == 'BTC'), 0)
+    krw_balance = next((float(balance['balance']) for balance in all_balances if balance['currency'] == 'KRW'), 0)
+    current_btc_price = pyupbit.get_current_price("KRW-BTC")
+
+    # 전체 자산 및 비중 계산
+    btc_value_krw = btc_balance * current_btc_price  # 비트코인 자산 가치
+    total_asset_value = krw_balance + btc_value_krw  # 총 자산 가치
+    btc_ratio = (btc_value_krw / total_asset_value) * 100 if total_asset_value > 0 else 0  # BTC 비중(%)
+    krw_ratio = (krw_balance / total_asset_value) * 100 if total_asset_value > 0 else 0  # KRW 비중(%)
+
+     # 보유 자산 비중을 출력
+    logger.info(f"BTC 비중: {btc_ratio:.2f}%, KRW 비중: {krw_ratio:.2f}%")
+
     # 2. 오더북(호가 데이터) 조회
     orderbook = pyupbit.get_orderbook("KRW-BTC")
     
@@ -265,8 +279,6 @@ def ai_trading():
     fear_greed_index = get_fear_and_greed_index()
 
     # 7. YouTube 자막 데이터 가져오기
-    
-    # EC2 서버용
     f = open("strategy.txt", "r", encoding="utf-8") # 직접 저장한 텍스트를 넣어주기
     youtube_transcript = f.read()
     f.close()
@@ -315,6 +327,8 @@ def ai_trading():
     current_market_data = {
         "fear_greed_index": fear_greed_index,
         "orderbook": orderbook,
+        "btc_ratio": btc_ratio,   # BTC 비중
+        "krw_ratio": krw_ratio,   # KRW 비중
         "daily_ohlcv": df_daily.to_dict(),
         "hourly_ohlcv": df_hourly.to_dict(),
         "daily_ohlcv_usd": df_usd_daily.to_dict(),  # USD 일봉 데이터
@@ -335,6 +349,7 @@ def ai_trading():
                 - The Fear and Greed Index and its implications
                 - Overall market sentiment
                 - Patterns and trends visible in the chart image
+                - BTC and KRW balance ratios in the current portfolio
                 - Recent trading performance and reflection
 
                 Recent trading reflection:
@@ -363,6 +378,8 @@ def ai_trading():
                         "type": "text",
                         "text": f"""Current investment status: {json.dumps(filtered_balances)}
         Orderbook: {json.dumps(orderbook)}
+        BTC ratio: {btc_ratio}%
+        KRW ratio: {krw_ratio}%
         Daily OHLCV with indicators (30 days): {df_daily.to_json()}
         Hourly OHLCV with indicators (24 hours): {df_hourly.to_json()}
         Daily OHLCV with indicators (USD-BTC): {df_usd_daily.to_json()}
