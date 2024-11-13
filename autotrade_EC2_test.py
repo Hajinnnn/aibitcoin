@@ -196,28 +196,39 @@ def create_driver():
         logger.error(f"ChromeDriver 생성 중 오류 발생: {e}")
         raise
 
-def capture_and_encode_screenshot(driver):
-    try:
-        # 스크린샷 캡처
-        png = driver.get_screenshot_as_png()
-        
-        # PIL Image로 변환
-        img = Image.open(io.BytesIO(png))
-        
-        # 이미지 리사이즈 (OpenAI API 제한에 맞춤)
-        img.thumbnail((2000, 2000))
-        
-        # 이미지를 바이트로 변환
-        buffered = io.BytesIO()
-        img.save(buffered, format="PNG")
-        
-        # base64로 인코딩
-        base64_image = base64.b64encode(buffered.getvalue()).decode('utf-8')
-        
-        return base64_image
-    except Exception as e:
-        logger.error(f"스크린샷 캡처 및 인코딩 중 오류 발생: {e}")
-        return None, None
+def capture_and_encode_screenshot(driver, max_retries=3):
+    retry_count = 0
+    while retry_count < max_retries:
+        try:
+            # 스크린샷 캡처
+            png = driver.get_screenshot_as_png()
+            
+            # PIL Image로 변환
+            img = Image.open(io.BytesIO(png))
+            
+            # 이미지 포맷 확인
+            if img.format != 'PNG':
+                logger.error("이미지 형식이 PNG가 아님. 지원되는 형식으로 변환 필요.")
+                img = img.convert("RGB")
+
+            # 이미지 리사이즈 (OpenAI API 제한에 맞춤)
+            img.thumbnail((2000, 2000))
+            
+            # 이미지를 바이트로 변환
+            buffered = io.BytesIO()
+            img.save(buffered, format="PNG")
+            
+            # base64로 인코딩
+            base64_image = base64.b64encode(buffered.getvalue()).decode('utf-8')
+            
+            return base64_image
+        except Exception as e:
+            logger.error(f"스크린샷 캡처 및 인코딩 중 오류 발생: {e}")
+            retry_count += 1
+            time.sleep(2)  # 잠시 대기 후 재시도
+
+    logger.error("최대 재시도 횟수에 도달하여 스크린샷 캡처 실패")
+    return None
 
 def ai_trading():
     # Upbit 객체 생성
