@@ -241,8 +241,23 @@ def capture_and_encode_screenshot(driver):
     except Exception as e:
         logger.error(f"스크린샷 캡처 및 인코딩 중 오류 발생: {e}")
         return None, None
-    
-def capture_chart_image(url):
+
+
+def upload_image_to_imgbb(base64_image, api_key):
+    url = "https://api.imgbb.com/1/upload"
+    payload = {
+        "key": api_key,
+        "image": base64_image
+    }
+    response = requests.post(url, data=payload)
+    if response.status_code == 200:
+        return response.json()["data"]["url"]
+    else:
+        logger.error(f"Image upload failed: {response.json()}")
+        return None
+
+
+def capture_chart_image(url, imgbb_api_key):
     driver = None
     try:
         driver = create_driver()
@@ -250,9 +265,13 @@ def capture_chart_image(url):
         logger.info(f"{url} 페이지 로드 완료")
         time.sleep(5)
         logger.info("차트 작업 완료")
-        chart_image = capture_and_encode_screenshot(driver)
-        logger.info("스크린샷 캡처 완료.")
-        return chart_image
+        base64_image = capture_and_encode_screenshot(driver)
+        if base64_image:
+            image_url = upload_image_to_imgbb(base64_image, imgbb_api_key)
+            if image_url:
+                logger.info("이미지 업로드 및 URL 생성 완료.")
+                return image_url
+        return None
     except Exception as e:
         logger.error(f"차트 캡처 중 오류 발생: {e}")
         return None
@@ -327,11 +346,11 @@ def ai_trading():
         youtube_transcript = f.read()
 
     # 8. Selenium으로 차트 캡처
+    imgbb_api_key = os.getenv("IMGBB_API_KEY")  # .env 파일에 imgbb API 키 추가
     krw_btc_chart_url = "https://upbit.com/full_chart?code=CRIX.UPBIT.KRW-BTC"
     usd_btc_chart_url = "https://upbit.com/full_chart?code=CRIX.UPBIT.USDT-BTC"
-
-    krw_btc_chart_image = capture_chart_image(krw_btc_chart_url)
-    usd_btc_chart_image = capture_chart_image(usd_btc_chart_url)
+    krw_btc_chart_image_url = capture_chart_image(krw_btc_chart_url, imgbb_api_key)
+    usd_btc_chart_image_url = capture_chart_image(usd_btc_chart_url, imgbb_api_key)
 
     # AI에게 데이터 제공하고 판단 받기
     client = OpenAI()
@@ -356,6 +375,15 @@ def ai_trading():
     # 반성 및 개선 내용 생성
     reflection = generate_reflection(recent_trades, current_market_data)
     
+    imgbb_api_key = os.getenv("IMGBB_API_KEY")  # .env 파일에 imgbb API 키 추가
+    krw_btc_chart_url = "https://upbit.com/full_chart?code=CRIX.UPBIT.KRW-BTC"
+    usd_btc_chart_url = "https://upbit.com/full_chart?code=CRIX.UPBIT.USDT-BTC"
+
+    # 차트 이미지 URL 생성
+    krw_btc_chart_image_url = capture_chart_image(krw_btc_chart_url, imgbb_api_key)
+    usd_btc_chart_image_url = capture_chart_image(usd_btc_chart_url, imgbb_api_key)
+
+
     # AI 모델에 반성 내용 제공
     response = client.chat.completions.create(
         model="gpt-4o-2024-08-06",
@@ -382,43 +410,27 @@ def ai_trading():
                 Based on this trading method, analyze the current market situation and make a judgment by synthesizing it with the provided data and recent performance reflection.
 
                 Response format:
-                1. Decision (buy, sell, or hold)
-                2. If the decision is 'buy', provide a percentage (1-100) of available KRW to use for buying.
-                If the decision is 'sell', provide a percentage (1-100) of held BTC to sell.
-                If the decision is 'hold', set the percentage to 0.
-                3. Reason for your decision
+1. Decision (buy, sell, or hold)
+2. If the decision is 'buy', provide a percentage (1-100) of available KRW to use for buying.
+   If the decision is 'sell', provide a percentage (1-100) of held BTC to sell.
+   If the decision is 'hold', set the percentage to 0.
+3. Reason for your decision
 
-                Ensure that the percentage is an integer between 1 and 100 for buy/sell decisions, and exactly 0 for hold decisions.
-                Your percentage should reflect the strength of your conviction in the decision based on the analyzed data."""
+Ensure that the percentage is an integer between 1 and 100 for buy/sell decisions, and exactly 0 for hold decisions.
+Your percentage should reflect the strength of your conviction in the decision based on the analyzed data."""
             },
             {
                 "role": "user",
-                "content": [
-                    {
-                        "type": "text",
-                        "text": f"""Current investment status: {json.dumps(investment_status)}
-        Orderbook: {json.dumps(orderbook)}
-        Daily OHLCV with indicators (30 days): {df_daily.to_json()}
-        Hourly OHLCV with indicators (24 hours): {df_hourly.to_json()}
-        Daily OHLCV with indicators (USD-BTC): {df_usd_daily.to_json()}
-        Hourly OHLCV with indicators (USD-BTC): {df_usd_hourly.to_json()}
-        Fear and Greed Index: {json.dumps(fear_greed_index)}"""
-                    },
-                    {
-                        "type": "image",
-                        "image": {
-                            "name": "KRW-BTC Chart",
-                            "data": krw_btc_chart_image
-                        }
-                    },
-                    {
-                        "type": "image",
-                        "image": {
-                            "name": "USD-BTC Chart",
-                            "data": usd_btc_chart_image
-                        }
-                    }
-                ]
+                "content": f"""Current investment status: {json.dumps(investment_status)}
+Orderbook: {json.dumps(orderbook)}
+Daily OHLCV with indicators (30 days): {df_daily.to_json()}
+Hourly OHLCV with indicators (24 hours): {df_hourly.to_json()}
+Daily OHLCV with indicators (USD-BTC): {df_usd_daily.to_json()}
+Hourly OHLCV with indicators (USD-BTC): {df_usd_hourly.to_json()}
+Fear and Greed Index: {json.dumps(fear_greed_index)}
+
+![KRW-BTC Chart]({krw_btc_chart_image_url})
+![USD-BTC Chart]({usd_btc_chart_image_url})"""
             }
         ],
         response_format={
