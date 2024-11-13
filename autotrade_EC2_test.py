@@ -41,12 +41,14 @@ def init_db():
     c.execute('''CREATE TABLE IF NOT EXISTS trades
                  (id INTEGER PRIMARY KEY AUTOINCREMENT,
                   timestamp TEXT,
+                  reason TEXT,
                   decision TEXT,
                   percentage INTEGER,
                   btc_balance REAL,
                   krw_balance REAL,
                   btc_avg_buy_price REAL,
-                  btc_krw_price REAL)''')
+                  btc_krw_price REAL,
+                  reflection TEXT)''')
     conn.commit()
     return conn
 
@@ -170,7 +172,34 @@ def get_fear_and_greed_index():
         logger.error(f"Failed to fetch Fear and Greed Index. Status code: {response.status_code}")
         return None
 
-# 차트 캡쳐
+# def get_bitcoin_news():
+#     serpapi_key = os.getenv("SERPAPI_API_KEY")
+#     url = "https://serpapi.com/search.json"
+#     params = {
+#         "engine": "google_news",
+#         "q": "btc",
+#         "api_key": serpapi_key
+#     }
+    
+    try:
+        response = requests.get(url, params=params)
+        response.raise_for_status()
+        data = response.json()
+        
+        news_results = data.get("news_results", [])
+        headlines = []
+        for item in news_results:
+            headlines.append({
+                "title": item.get("title", ""),
+                "date": item.get("date", "")
+            })
+        
+        return headlines[:5]
+    except requests.RequestException as e:
+        logger.error(f"Error fetching news: {e}")
+        return []
+
+# EC2 서버용
 def create_driver():
     logger.info("ChromeDriver 설정 중...")
     try:
@@ -185,50 +214,52 @@ def create_driver():
         # Initialize the WebDriver with the specified options
         driver = webdriver.Chrome(service=service, options=chrome_options)
 
-         # webdriver-manager를 사용하여 ChromeDriver 자동 설치 및 버전 관리
-        service = Service(ChromeDriverManager().install())
-
-        # WebDriver 초기화
-        driver = webdriver.Chrome(service=service, options=chrome_options)
-
         return driver
     except Exception as e:
         logger.error(f"ChromeDriver 생성 중 오류 발생: {e}")
         raise
 
-def capture_and_encode_screenshot(driver, max_retries=3):
-    retry_count = 0
-    while retry_count < max_retries:
-        try:
-            # 스크린샷 캡처
-            png = driver.get_screenshot_as_png()
-            
-            # PIL Image로 변환
-            img = Image.open(io.BytesIO(png))
-            
-            # 이미지 포맷 확인
-            if img.format != 'PNG':
-                logger.error("이미지 형식이 PNG가 아님. 지원되는 형식으로 변환 필요.")
-                img = img.convert("RGB")
+def capture_and_encode_screenshot(driver):
+    try:
+        # 스크린샷 캡처
+        png = driver.get_screenshot_as_png()
+        
+        # PIL Image로 변환
+        img = Image.open(io.BytesIO(png))
+        
+        # 이미지 리사이즈 (OpenAI API 제한에 맞춤)
+        img.thumbnail((2000, 2000))
+        
+        # 이미지를 바이트로 변환
+        buffered = io.BytesIO()
+        img.save(buffered, format="PNG")
+        
+        # base64로 인코딩
+        base64_image = base64.b64encode(buffered.getvalue()).decode('utf-8')
+        
+        return base64_image
+    except Exception as e:
+        logger.error(f"스크린샷 캡처 및 인코딩 중 오류 발생: {e}")
+        return None, None
+    
+def capture_chart_image(url):
+    driver = None
+    try:
+        driver = create_driver()
+        driver.get(url)
+        logger.info(f"{url} 페이지 로드 완료")
+        time.sleep(5)
+        logger.info("차트 작업 완료")
+        chart_image = capture_and_encode_screenshot(driver)
+        logger.info("스크린샷 캡처 완료.")
+        return chart_image
+    except Exception as e:
+        logger.error(f"차트 캡처 중 오류 발생: {e}")
+        return None
+    finally:
+        if driver:
+            driver.quit()
 
-            # 이미지 리사이즈 (OpenAI API 제한에 맞춤)
-            img.thumbnail((2000, 2000))
-            
-            # 이미지를 바이트로 변환
-            buffered = io.BytesIO()
-            img.save(buffered, format="PNG")
-            
-            # base64로 인코딩
-            base64_image = base64.b64encode(buffered.getvalue()).decode('utf-8')
-            
-            return base64_image
-        except Exception as e:
-            logger.error(f"스크린샷 캡처 및 인코딩 중 오류 발생: {e}")
-            retry_count += 1
-            time.sleep(2)  # 잠시 대기 후 재시도
-
-    logger.error("최대 재시도 횟수에 도달하여 스크린샷 캡처 실패")
-    return None
 
 def ai_trading():
     # Upbit 객체 생성
@@ -237,22 +268,21 @@ def ai_trading():
     upbit = pyupbit.Upbit(access, secret)
 
     # 1. 현재 투자 상태 조회
-    # all_balances = upbit.get_balances()
-    # filtered_balances = [balance for balance in all_balances if balance['currency'] in ['BTC', 'KRW']]
-    
-    all_balances = upbit.get_balances()
-    btc_balance = next((float(balance['balance']) for balance in all_balances if balance['currency'] == 'BTC'), 0)
-    krw_balance = next((float(balance['balance']) for balance in all_balances if balance['currency'] == 'KRW'), 0)
+    krw_balance = upbit.get_balance("KRW")
+    btc_balance = upbit.get_balance("KRW-BTC")
     current_btc_price = pyupbit.get_current_price("KRW-BTC")
+    total_asset_value = krw_balance + btc_balance * current_btc_price
 
-    # 전체 자산 및 비중 계산
-    btc_value_krw = btc_balance * current_btc_price  # 비트코인 자산 가치
-    total_asset_value = krw_balance + btc_value_krw  # 총 자산 가치
-    btc_ratio = (btc_value_krw / total_asset_value) * 100 if total_asset_value > 0 else 0  # BTC 비중(%)
-    krw_ratio = (krw_balance / total_asset_value) * 100 if total_asset_value > 0 else 0  # KRW 비중(%)
+    krw_proportion = krw_balance / total_asset_value if total_asset_value > 0 else 0
+    btc_proportion = (btc_balance * current_btc_price) / total_asset_value if total_asset_value > 0 else 0
 
-     # 보유 자산 비중을 출력
-    logger.info(f"BTC 비중: {btc_ratio:.2f}%, KRW 비중: {krw_ratio:.2f}%")
+    investment_status = {
+        "krw_balance": krw_balance,
+        "btc_balance": btc_balance,
+        "total_asset_value": total_asset_value,
+        "krw_proportion": krw_proportion,
+        "btc_proportion": btc_proportion
+    }
 
     # 2. 오더북(호가 데이터) 조회
     orderbook = pyupbit.get_orderbook("KRW-BTC")
@@ -289,41 +319,19 @@ def ai_trading():
     # 5. 공포 탐욕 지수 가져오기
     fear_greed_index = get_fear_and_greed_index()
 
+    # 6. 뉴스 헤드라인 가져오기
+    #news_headlines = get_bitcoin_news()
+
     # 7. YouTube 자막 데이터 가져오기
-    f = open("strategy.txt", "r", encoding="utf-8") # 직접 저장한 텍스트를 넣어주기
-    youtube_transcript = f.read()
-    f.close()
+    with open("strategy.txt", "r", encoding="utf-8") as f:
+        youtube_transcript = f.read()
 
-    # Selenium으로 차트 캡처
-    driver = None
-    usd_chart_image = None
-    krw_chart_image = None
-    try:
-        driver = create_driver()
-        
-        # USD 차트 캡처
-        driver.get("https://upbit.com/full_chart?code=CRIX.UPBIT.USDT-BTC")
-        logger.info("USD 차트 페이지 로드 완료")
-        time.sleep(5)  # 페이지 로딩 대기 시간 증가
-        logger.info("USD 차트 캡처 시작")
-        usd_chart_image = capture_and_encode_screenshot(driver)
-        logger.info("USD 차트 캡처 완료")
+    # 8. Selenium으로 차트 캡처
+    krw_btc_chart_url = "https://upbit.com/full_chart?code=CRIX.UPBIT.KRW-BTC"
+    usd_btc_chart_url = "https://upbit.com/full_chart?code=CRIX.UPBIT.USDT-BTC"
 
-        # KRW 차트 캡처
-        driver.get("https://upbit.com/full_chart?code=CRIX.UPBIT.KRW-BTC")
-        logger.info("KRW 차트 페이지 로드 완료")
-        time.sleep(5)  # 페이지 로딩 대기 시간 증가
-        logger.info("KRW 차트 캡처 시작")
-        krw_chart_image = capture_and_encode_screenshot(driver)
-        logger.info("KRW 차트 캡처 완료")
-
-    except WebDriverException as e:
-        logger.error(f"WebDriver 오류 발생: {e}")
-    except Exception as e:
-        logger.error(f"차트 캡처 중 오류 발생: {e}")
-    finally:
-        if driver:
-            driver.quit()
+    krw_btc_chart_image = capture_chart_image(krw_btc_chart_url)
+    usd_btc_chart_image = capture_chart_image(usd_btc_chart_url)
 
     # AI에게 데이터 제공하고 판단 받기
     client = OpenAI()
@@ -337,9 +345,8 @@ def ai_trading():
     # 현재 시장 데이터 수집 (기존 코드에서 가져온 데이터 사용)
     current_market_data = {
         "fear_greed_index": fear_greed_index,
+        #"news_headlines": news_headlines,
         "orderbook": orderbook,
-        "btc_ratio": btc_ratio,   # BTC 비중
-        "krw_ratio": krw_ratio,   # KRW 비중
         "daily_ohlcv": df_daily.to_dict(),
         "hourly_ohlcv": df_hourly.to_dict(),
         "daily_ohlcv_usd": df_usd_daily.to_dict(),  # USD 일봉 데이터
@@ -356,12 +363,14 @@ def ai_trading():
             {
                 "role": "system",
                 "content": f"""You are an expert in Bitcoin investing. Analyze the provided data and determine whether to buy, sell, or hold at the current moment. Consider the following in your analysis:
+
                 - Technical indicators and market data (both KRW-BTC and USD-BTC)
+                - Recent news headlines and their potential impact on Bitcoin price
                 - The Fear and Greed Index and its implications
                 - Overall market sentiment
                 - Patterns and trends visible in the chart image
-                - BTC and KRW balance ratios in the current portfolio
                 - Recent trading performance and reflection
+                - The proportion of current BTC and KRW holdings
 
                 Recent trading reflection:
                 {reflection}
@@ -387,10 +396,8 @@ def ai_trading():
                 "content": [
                     {
                         "type": "text",
-                        "text": f"""Current investment status: BTC balance: {btc_balance} BTC, KRW balance: {krw_balance} KRW
+                        "text": f"""Current investment status: {json.dumps(investment_status)}
         Orderbook: {json.dumps(orderbook)}
-        BTC ratio: {btc_ratio}%
-        KRW ratio: {krw_ratio}%
         Daily OHLCV with indicators (30 days): {df_daily.to_json()}
         Hourly OHLCV with indicators (24 hours): {df_hourly.to_json()}
         Daily OHLCV with indicators (USD-BTC): {df_usd_daily.to_json()}
@@ -398,15 +405,17 @@ def ai_trading():
         Fear and Greed Index: {json.dumps(fear_greed_index)}"""
                     },
                     {
-                        "type": "image_url",
-                    "image_url": {
-                        "url": f"data:image/png;base64,{usd_chart_image}"
-                    }
-                },
-                {
-                    "type": "image_url",
-                    "image_url": {
-                        "url": f"data:image/png;base64,{krw_chart_image}"
+                        "type": "image",
+                        "image": {
+                            "name": "KRW-BTC Chart",
+                            "data": krw_btc_chart_image
+                        }
+                    },
+                    {
+                        "type": "image",
+                        "image": {
+                            "name": "USD-BTC Chart",
+                            "data": usd_btc_chart_image
                         }
                     }
                 ]
