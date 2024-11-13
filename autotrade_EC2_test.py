@@ -199,7 +199,7 @@ def get_fear_and_greed_index():
         logger.error(f"Error fetching news: {e}")
         return []
 
-# EC2 서버용
+# ChromeDriver 설정 (EC2 서버용)
 def create_driver():
     logger.info("ChromeDriver 설정 중...")
     try:
@@ -219,6 +219,7 @@ def create_driver():
         logger.error(f"ChromeDriver 생성 중 오류 발생: {e}")
         raise
 
+# 스크린샷 캡처 및 인코딩
 def capture_and_encode_screenshot(driver):
     try:
         # 스크린샷 캡처
@@ -242,7 +243,7 @@ def capture_and_encode_screenshot(driver):
         logger.error(f"스크린샷 캡처 및 인코딩 중 오류 발생: {e}")
         return None, None
 
-
+# 이미지 업로드
 def upload_image_to_imgbb(base64_image, api_key):
     url = "https://api.imgbb.com/1/upload"
     payload = {
@@ -256,7 +257,7 @@ def upload_image_to_imgbb(base64_image, api_key):
         logger.error(f"Image upload failed: {response.json()}")
         return None
 
-
+# 차트 이미지 캡처 및 URL 생성
 def capture_chart_image(url, imgbb_api_key):
     driver = None
     try:
@@ -279,6 +280,22 @@ def capture_chart_image(url, imgbb_api_key):
         if driver:
             driver.quit()
 
+# BTC와 KRW 비중에 따른 매수/매도 비율 조정 함수
+def adjust_trade_percentage(btc_proportion, krw_proportion, decision, base_percentage):
+    """
+    BTC와 KRW 비중에 따라 매수/매도 비율을 조정합니다.
+    BTC 비중이 높을수록 매도 비율을 증가시키고, KRW 비중이 높을수록 매수 비율을 증가시킵니다.
+    """
+    adjusted_percentage = base_percentage
+    if decision == "sell":
+        # BTC 비중이 높을수록 매도 비율 증가
+        adjusted_percentage += int(btc_proportion * 50)  # 최대 50%까지 추가 매도
+    elif decision == "buy":
+        # KRW 비중이 높을수록 매수 비율 증가
+        adjusted_percentage += int(krw_proportion * 50)  # 최대 50%까지 추가 매수
+    
+    # 비율을 100%로 제한
+    return min(adjusted_percentage, 100)
 
 def ai_trading():
     # Upbit 객체 생성
@@ -303,7 +320,7 @@ def ai_trading():
         "btc_proportion": btc_proportion
     }
 
-     # 차트 이미지를 미리 캡처하여 재사용
+    # 차트 이미지를 미리 캡처하여 재사용
     imgbb_api_key = os.getenv("IMGBB_API_KEY")
     krw_btc_chart_url = "https://upbit.com/full_chart?code=CRIX.UPBIT.KRW-BTC"
     usd_btc_chart_url = "https://upbit.com/full_chart?code=CRIX.UPBIT.USDT-BTC"
@@ -453,11 +470,14 @@ Fear and Greed Index: {json.dumps(fear_greed_index)}
 
     order_executed = False
 
+    # BTC와 KRW 비중에 따른 매수/매도 비율 조정
+    adjusted_percentage = adjust_trade_percentage(btc_proportion, krw_proportion, result.decision, result.percentage)
+
     if result.decision == "buy":
         my_krw = upbit.get_balance("KRW")
-        buy_amount = my_krw * (result.percentage / 100) * 0.9995  # 수수료 고려
+        buy_amount = my_krw * (adjusted_percentage / 100) * 0.9995  # 수수료 고려
         if buy_amount > 5000:
-            print(f"### Buy Order Executed: {result.percentage}% of available KRW ###")
+            print(f"### Buy Order Executed: {adjusted_percentage}% of available KRW ###")
             order = upbit.buy_market_order("KRW-BTC", buy_amount)
             if order:
                 order_executed = True
@@ -466,10 +486,10 @@ Fear and Greed Index: {json.dumps(fear_greed_index)}
             print("### Buy Order Failed: Insufficient KRW (less than 5000 KRW) ###")
     elif result.decision == "sell":
         my_btc = upbit.get_balance("KRW-BTC")
-        sell_amount = my_btc * (result.percentage / 100)
+        sell_amount = my_btc * (adjusted_percentage / 100)
         current_price = pyupbit.get_current_price("KRW-BTC")
         if sell_amount * current_price > 5000:
-            print(f"### Sell Order Executed: {result.percentage}% of held BTC ###")
+            print(f"### Sell Order Executed: {adjusted_percentage}% of held BTC ###")
             order = upbit.sell_market_order("KRW-BTC", sell_amount)
             if order:
                 order_executed = True
