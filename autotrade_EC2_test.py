@@ -185,6 +185,12 @@ def create_driver():
         # Initialize the WebDriver with the specified options
         driver = webdriver.Chrome(service=service, options=chrome_options)
 
+         # webdriver-manager를 사용하여 ChromeDriver 자동 설치 및 버전 관리
+        service = Service(ChromeDriverManager().install())
+
+        # WebDriver 초기화
+        driver = webdriver.Chrome(service=service, options=chrome_options)
+
         return driver
     except Exception as e:
         logger.error(f"ChromeDriver 생성 중 오류 발생: {e}")
