@@ -280,23 +280,23 @@ def capture_chart_image(url, imgbb_api_key):
         if driver:
             driver.quit()
 
-# BTC와 KRW 비중에 따른 매수/매도 비율 조정 함수
-def adjust_trade_percentage(btc_proportion, krw_proportion, decision, base_percentage):
-    """
-    Adjust the buy/sell percentage based on BTC and KRW proportions.
-    - If selling, increase the percentage based on BTC proportion.
-    - If buying, increase the percentage based on KRW proportion.
-    """
-    adjusted_percentage = base_percentage
-    if decision == "sell":
-        # BTC 비중이 높을수록 매도 비율 증가
-        adjusted_percentage += int(btc_proportion * 50)  # 최대 50%까지 추가 매도
-    elif decision == "buy":
-        # KRW 비중이 높을수록 매수 비율 증가
-        adjusted_percentage += int(krw_proportion * 50)  # 최대 50%까지 추가 매수
+# # BTC와 KRW 비중에 따른 매수/매도 비율 조정 함수
+# def adjust_trade_percentage(btc_proportion, krw_proportion, decision, base_percentage):
+#     """
+#     Adjust the buy/sell percentage based on BTC and KRW proportions.
+#     - If selling, increase the percentage based on BTC proportion.
+#     - If buying, increase the percentage based on KRW proportion.
+#     """
+#     adjusted_percentage = base_percentage
+#     if decision == "sell":
+#         # BTC 비중이 높을수록 매도 비율 증가
+#         adjusted_percentage += int(btc_proportion * 50)  # 최대 50%까지 추가 매도
+#     elif decision == "buy":
+#         # KRW 비중이 높을수록 매수 비율 증가
+#         adjusted_percentage += int(krw_proportion * 50)  # 최대 50%까지 추가 매수
     
-    # 비율을 100%로 제한
-    return min(adjusted_percentage, 100)
+#     # 비율을 100%로 제한
+#     return min(adjusted_percentage, 100)
 
 def ai_trading():
     # Upbit 객체 생성
@@ -408,7 +408,7 @@ def ai_trading():
                 - Overall market sentiment
                 - Patterns and trends visible in the chart image
                 - Recent trading performance and reflection
-                - The current proportion of BTC and KRW holdings, where a higher BTC proportion may suggest a conservative sell approach with an increased sell ratio, while a higher KRW proportion may indicate a buy approach with an increased buy ratio
+                - The current proportion of BTC and KRW holdings, where a higher BTC proportion may suggest a sell approach with an increased sell ratio, while a higher KRW proportion may indicate a buy approach with an increased buy ratio
 
                 Recent trading reflection:
                 {reflection}
@@ -471,32 +471,62 @@ Fear and Greed Index: {json.dumps(fear_greed_index)}
 
     order_executed = False
 
-    # BTC와 KRW 비중에 따른 매수/매도 비율 조정
-    adjusted_percentage = adjust_trade_percentage(btc_proportion, krw_proportion, result.decision, result.percentage)
+    # # BTC와 KRW 비중에 따른 매수/매도 비율 조정
+    # adjusted_percentage = adjust_trade_percentage(btc_proportion, krw_proportion, result.decision, result.percentage)
 
+    # if result.decision == "buy":
+    #     my_krw = upbit.get_balance("KRW")
+    #     buy_amount = my_krw * (adjusted_percentage / 100) * 0.9995  # 수수료 고려
+    #     if buy_amount > 5000:
+    #         print(f"### Buy Order Executed: {adjusted_percentage}% of available KRW ###")
+    #         order = upbit.buy_market_order("KRW-BTC", buy_amount)
+    #         if order:
+    #             order_executed = True
+    #         print(order)
+    #     else:
+    #         print("### Buy Order Failed: Insufficient KRW (less than 5000 KRW) ###")
+    # elif result.decision == "sell":
+    #     my_btc = upbit.get_balance("KRW-BTC")
+    #     sell_amount = my_btc * (adjusted_percentage / 100)
+    #     current_price = pyupbit.get_current_price("KRW-BTC")
+    #     if sell_amount * current_price > 5000:
+    #         print(f"### Sell Order Executed: {adjusted_percentage}% of held BTC ###")
+    #         order = upbit.sell_market_order("KRW-BTC", sell_amount)
+    #         if order:
+    #             order_executed = True
+    #         print(order)
+    #     else:
+    #         print("### Sell Order Failed: Insufficient BTC (less than 5000 KRW worth) ###")
+
+    # AI가 제시한 percentage 사용
     if result.decision == "buy":
         my_krw = upbit.get_balance("KRW")
-        buy_amount = my_krw * (adjusted_percentage / 100) * 0.9995  # 수수료 고려
+        buy_amount = my_krw * (result.percentage / 100) * 0.9995  # 수수료 고려
         if buy_amount > 5000:
-            print(f"### Buy Order Executed: {adjusted_percentage}% of available KRW ###")
+            print(f"### Buy Order Executed: {result.percentage}% of available KRW ###")
+            logger.info(f"Buy Amount: {buy_amount}")
             order = upbit.buy_market_order("KRW-BTC", buy_amount)
             if order:
                 order_executed = True
             print(order)
         else:
             print("### Buy Order Failed: Insufficient KRW (less than 5000 KRW) ###")
+            logger.warning("Buy Order Failed: Insufficient KRW (less than 5000 KRW)")
     elif result.decision == "sell":
         my_btc = upbit.get_balance("KRW-BTC")
-        sell_amount = my_btc * (adjusted_percentage / 100)
+        sell_amount = my_btc * (result.percentage / 100)
         current_price = pyupbit.get_current_price("KRW-BTC")
+        logger.info(f"Sell Amount: {sell_amount}, Current Price: {current_price}")
         if sell_amount * current_price > 5000:
-            print(f"### Sell Order Executed: {adjusted_percentage}% of held BTC ###")
+            print(f"### Sell Order Executed: {result.percentage}% of held BTC ###")
+            logger.info(f"Sell Amount: {sell_amount}")
             order = upbit.sell_market_order("KRW-BTC", sell_amount)
             if order:
                 order_executed = True
             print(order)
         else:
             print("### Sell Order Failed: Insufficient BTC (less than 5000 KRW worth) ###")
+            logger.warning("Sell Order Failed: Insufficient BTC (less than 5000 KRW worth)")
 
     # 거래 실행 여부와 관계없이 현재 잔고 조회
     time.sleep(1)  # API 호출 제한을 고려하여 잠시 대기
