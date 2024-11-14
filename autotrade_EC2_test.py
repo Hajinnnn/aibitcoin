@@ -81,8 +81,8 @@ def calculate_performance(trades_df):
 def generate_reflection(trades_df, current_market_data):
     performance = calculate_performance(trades_df)
     
-    # 최근 거래 데이터 요약 (최신 5개만 추출하고 필요한 열만 선택)
-    recent_trades_summary = trades_df[['timestamp', 'decision', 'percentage', 'reason']].tail(5).to_json(orient='records')
+    # 최근 거래 데이터 요약 (최신 30개만 추출하고 필요한 열만 선택)
+    recent_trades_summary = trades_df[['timestamp', 'decision', 'percentage', 'reason']].tail(30).to_json(orient='records')
     
     client = OpenAI()
     response = client.chat.completions.create(
@@ -147,6 +147,9 @@ def add_indicators(df):
         volume=df['volume'],
         window=14
     ).money_flow_index()
+
+    # 모멘텀 (ROC - Rate of Change)
+    df['roc'] = ta.momentum.ROCIndicator(close=df['close'], window=12).roc()
 
     # MACD
     macd = ta.trend.MACD(close=df['close'])
