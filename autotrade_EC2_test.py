@@ -86,7 +86,7 @@ def generate_reflection(trades_df, current_market_data):
     
     client = OpenAI()
     response = client.chat.completions.create(
-        model="gpt-4o",
+        model="gpt-4o-mini",
         messages=[
             {
                 "role": "system",
@@ -172,14 +172,14 @@ def get_fear_and_greed_index():
         logger.error(f"Failed to fetch Fear and Greed Index. Status code: {response.status_code}")
         return None
 
-def get_bitcoin_news():
-    serpapi_key = os.getenv("SERPAPI_API_KEY")
-    url = "https://serpapi.com/search.json"
-    params = {
-        "engine": "google_news",
-        "q": "btc",
-        "api_key": serpapi_key
-    }
+# def get_bitcoin_news():
+#     serpapi_key = os.getenv("SERPAPI_API_KEY")
+#     url = "https://serpapi.com/search.json"
+#     params = {
+#         "engine": "google_news",
+#         "q": "btc",
+#         "api_key": serpapi_key
+#     }
     
     try:
         response = requests.get(url, params=params)
@@ -371,7 +371,7 @@ def ai_trading():
     fear_greed_index = get_fear_and_greed_index()
 
     # 6. 뉴스 헤드라인 가져오기
-    news_headlines = get_bitcoin_news()
+    #news_headlines = get_bitcoin_news()
 
     # 7. YouTube 자막 데이터 가져오기
     with open("strategy.txt", "r", encoding="utf-8") as f:
@@ -382,7 +382,7 @@ def ai_trading():
     recent_trades = get_recent_trades(conn)
     current_market_data = {
         "fear_greed_index": fear_greed_index,
-        "news_headlines": news_headlines,
+        #"news_headlines": news_headlines,
         "orderbook": orderbook,
         "daily_ohlcv": df_daily.to_dict(),
         "hourly_ohlcv": df_hourly.to_dict(),
@@ -396,7 +396,7 @@ def ai_trading():
     # AI 모델에 반성 내용 제공
     client = OpenAI()
     response = client.chat.completions.create(
-        model="gpt-4o-2024-08-06",
+        model="gpt-4o-mini",
         messages=[
             {
                 "role": "system",
@@ -408,7 +408,7 @@ def ai_trading():
                 - Overall market sentiment
                 - Patterns and trends visible in the chart image
                 - Recent trading performance and reflection
-                - The current proportion of BTC and KRW holdings, where a higher BTC proportion may suggest a conservative sell approach with an increased sell ratio, while a higher KRW proportion may indicate a buy approach with an increased buy ratio
+                - The current proportion of BTC and KRW holdings, where a higher BTC proportion may suggest a sell approach with an increased sell ratio, while a higher KRW proportion may indicate a buy approach with an increased buy ratio
 
                 Recent trading reflection:
                 {reflection}
@@ -420,28 +420,27 @@ def ai_trading():
                 Based on this trading method, analyze the current market situation and make a judgment by synthesizing it with the provided data and recent performance reflection.
 
                 Response format:
-                1. Decision (buy, sell, or hold)
-                2. If the decision is 'buy', provide a percentage (1-100) of available KRW to use for buying.
-                If the decision is 'sell', provide a percentage (1-100) of held BTC to sell.
-                If the decision is 'hold', set the percentage to 0.
-                3. Reason for your decision
+1. Decision (buy, sell, or hold)
+2. If the decision is 'buy', provide a percentage (1-100) of available KRW to use for buying.
+   If the decision is 'sell', provide a percentage (1-100) of held BTC to sell.
+   If the decision is 'hold', set the percentage to 0.
+3. Reason for your decision
 
-                Ensure that the percentage is an integer between 1 and 100 for buy/sell decisions, and exactly 0 for hold decisions.
-                Your percentage should reflect the strength of your conviction in the decision based on the analyzed data."""
+Ensure that the percentage is an integer between 1 and 100 for buy/sell decisions, and exactly 0 for hold decisions.
+Your percentage should reflect the strength of your conviction in the decision based on the analyzed data."""
             },
             {
                 "role": "user",
                 "content": f"""Current investment status: {json.dumps(investment_status)}
-                Orderbook: {json.dumps(orderbook)}
-                Daily OHLCV with indicators (30 days): {df_daily.to_json()}
-                Hourly OHLCV with indicators (24 hours): {df_hourly.to_json()}
-                Daily OHLCV with indicators (USD-BTC): {df_usd_daily.to_json()}
-                Hourly OHLCV with indicators (USD-BTC): {df_usd_hourly.to_json()}
-                Recent news headlines: {json.dumps(news_headlines)}
-                Fear and Greed Index: {json.dumps(fear_greed_index)}
+Orderbook: {json.dumps(orderbook)}
+Daily OHLCV with indicators (30 days): {df_daily.to_json()}
+Hourly OHLCV with indicators (24 hours): {df_hourly.to_json()}
+Daily OHLCV with indicators (USD-BTC): {df_usd_daily.to_json()}
+Hourly OHLCV with indicators (USD-BTC): {df_usd_hourly.to_json()}
+Fear and Greed Index: {json.dumps(fear_greed_index)}
 
-                ![KRW-BTC Chart]({krw_btc_chart_image_url})
-                ![USD-BTC Chart]({usd_btc_chart_image_url})"""
+![KRW-BTC Chart]({krw_btc_chart_image_url})
+![USD-BTC Chart]({usd_btc_chart_image_url})"""
             }
         ],
         response_format={
@@ -499,7 +498,7 @@ def ai_trading():
     #     else:
     #         print("### Sell Order Failed: Insufficient BTC (less than 5000 KRW worth) ###")
 
-# AI가 제시한 percentage 사용
+    # AI가 제시한 percentage 사용
     if result.decision == "buy":
         my_krw = upbit.get_balance("KRW")
         buy_amount = my_krw * (result.percentage / 100) * 0.9995  # 수수료 고려
