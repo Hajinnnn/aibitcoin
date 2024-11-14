@@ -81,12 +81,12 @@ def calculate_performance(trades_df):
 def generate_reflection(trades_df, current_market_data):
     performance = calculate_performance(trades_df)
     
-    # 최근 거래 데이터 요약 (최신 5개만 추출하고 필요한 열만 선택)
-    recent_trades_summary = trades_df[['timestamp', 'decision', 'percentage', 'reason']].tail(5).to_json(orient='records')
+    # 최근 거래 데이터 요약 (최신 30개만 추출하고 필요한 열만 선택)
+    recent_trades_summary = trades_df[['timestamp', 'decision', 'percentage', 'reason']].tail(30).to_json(orient='records')
     
     client = OpenAI()
     response = client.chat.completions.create(
-        model="gpt-4o",
+        model="gpt-4o-mini",
         messages=[
             {
                 "role": "system",
@@ -147,6 +147,9 @@ def add_indicators(df):
         volume=df['volume'],
         window=14
     ).money_flow_index()
+
+    # 모멘텀 (ROC - Rate of Change)
+    df['roc'] = ta.momentum.ROCIndicator(close=df['close'], window=12).roc()
 
     # MACD
     macd = ta.trend.MACD(close=df['close'])
@@ -280,24 +283,6 @@ def capture_chart_image(url, imgbb_api_key):
         if driver:
             driver.quit()
 
-# # BTC와 KRW 비중에 따른 매수/매도 비율 조정 함수
-# def adjust_trade_percentage(btc_proportion, krw_proportion, decision, base_percentage):
-#     """
-#     Adjust the buy/sell percentage based on BTC and KRW proportions.
-#     - If selling, increase the percentage based on BTC proportion.
-#     - If buying, increase the percentage based on KRW proportion.
-#     """
-#     adjusted_percentage = base_percentage
-#     if decision == "sell":
-#         # BTC 비중이 높을수록 매도 비율 증가
-#         adjusted_percentage += int(btc_proportion * 50)  # 최대 50%까지 추가 매도
-#     elif decision == "buy":
-#         # KRW 비중이 높을수록 매수 비율 증가
-#         adjusted_percentage += int(krw_proportion * 50)  # 최대 50%까지 추가 매수
-    
-#     # 비율을 100%로 제한
-#     return min(adjusted_percentage, 100)
-
 def ai_trading():
     # Upbit 객체 생성
     access = os.getenv("UPBIT_ACCESS_KEY")
@@ -396,7 +381,7 @@ def ai_trading():
     # AI 모델에 반성 내용 제공
     client = OpenAI()
     response = client.chat.completions.create(
-        model="gpt-4o-2024-08-06",
+        model="gpt-4o-mini",
         messages=[
             {
                 "role": "system",
@@ -471,33 +456,6 @@ def ai_trading():
     print(f"### Reason: {result.reason} ###")
 
     order_executed = False
-
-    # # BTC와 KRW 비중에 따른 매수/매도 비율 조정
-    # adjusted_percentage = adjust_trade_percentage(btc_proportion, krw_proportion, result.decision, result.percentage)
-
-    # if result.decision == "buy":
-    #     my_krw = upbit.get_balance("KRW")
-    #     buy_amount = my_krw * (adjusted_percentage / 100) * 0.9995  # 수수료 고려
-    #     if buy_amount > 5000:
-    #         print(f"### Buy Order Executed: {adjusted_percentage}% of available KRW ###")
-    #         order = upbit.buy_market_order("KRW-BTC", buy_amount)
-    #         if order:
-    #             order_executed = True
-    #         print(order)
-    #     else:
-    #         print("### Buy Order Failed: Insufficient KRW (less than 5000 KRW) ###")
-    # elif result.decision == "sell":
-    #     my_btc = upbit.get_balance("KRW-BTC")
-    #     sell_amount = my_btc * (adjusted_percentage / 100)
-    #     current_price = pyupbit.get_current_price("KRW-BTC")
-    #     if sell_amount * current_price > 5000:
-    #         print(f"### Sell Order Executed: {adjusted_percentage}% of held BTC ###")
-    #         order = upbit.sell_market_order("KRW-BTC", sell_amount)
-    #         if order:
-    #             order_executed = True
-    #         print(order)
-    #     else:
-    #         print("### Sell Order Failed: Insufficient BTC (less than 5000 KRW worth) ###")
 
     # AI가 제시한 percentage 사용
     if result.decision == "buy":
