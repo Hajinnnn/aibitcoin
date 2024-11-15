@@ -417,10 +417,11 @@ def ai_trading():
                 {reflection}
 
                 Particularly important is to always refer to the trading method of 'Wonyyotti', a legendary Korean investor, to assess the current situation and make trading decisions. Wonyyotti's trading method is as follows:
-
                 {youtube_transcript}
 
                 Based on this trading method, analyze the current market situation and make a judgment by synthesizing it with the provided data and recent performance reflection.
+
+                Important: If the decision is "buy", limit the buy percentage to a maximum of 40% of the available KRW balance. Similarly, if the decision is "sell", limit the sell percentage to a maximum of 40% of held BTC.
 
                 Response format:
 1. Decision (buy, sell, or hold)
@@ -473,33 +474,6 @@ Fear and Greed Index: {json.dumps(fear_greed_index)}
     print(f"### Reason: {result.reason} ###")
 
     order_executed = False
-
-    # # BTC와 KRW 비중에 따른 매수/매도 비율 조정
-    # adjusted_percentage = adjust_trade_percentage(btc_proportion, krw_proportion, result.decision, result.percentage)
-
-    # if result.decision == "buy":
-    #     my_krw = upbit.get_balance("KRW")
-    #     buy_amount = my_krw * (adjusted_percentage / 100) * 0.9995  # 수수료 고려
-    #     if buy_amount > 5000:
-    #         print(f"### Buy Order Executed: {adjusted_percentage}% of available KRW ###")
-    #         order = upbit.buy_market_order("KRW-BTC", buy_amount)
-    #         if order:
-    #             order_executed = True
-    #         print(order)
-    #     else:
-    #         print("### Buy Order Failed: Insufficient KRW (less than 5000 KRW) ###")
-    # elif result.decision == "sell":
-    #     my_btc = upbit.get_balance("KRW-BTC")
-    #     sell_amount = my_btc * (adjusted_percentage / 100)
-    #     current_price = pyupbit.get_current_price("KRW-BTC")
-    #     if sell_amount * current_price > 5000:
-    #         print(f"### Sell Order Executed: {adjusted_percentage}% of held BTC ###")
-    #         order = upbit.sell_market_order("KRW-BTC", sell_amount)
-    #         if order:
-    #             order_executed = True
-    #         print(order)
-    #     else:
-    #         print("### Sell Order Failed: Insufficient BTC (less than 5000 KRW worth) ###")
 
     # AI가 제시한 percentage 사용
     if result.decision == "buy":
