@@ -417,10 +417,11 @@ def ai_trading():
                 {reflection}
 
                 Particularly important is to always refer to the trading method of 'Wonyyotti', a legendary Korean investor, to assess the current situation and make trading decisions. Wonyyotti's trading method is as follows:
-
                 {youtube_transcript}
 
                 Based on this trading method, analyze the current market situation and make a judgment by synthesizing it with the provided data and recent performance reflection.
+
+                Important: If the decision is "buy", limit the buy percentage to a maximum of 40% of the available KRW balance. Similarly, if the decision is "sell", limit the sell percentage to a maximum of 40% of held BTC.
 
                 Response format:
 1. Decision (buy, sell, or hold)
