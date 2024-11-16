@@ -176,33 +176,6 @@ def get_fear_and_greed_index():
         logger.error(f"Failed to fetch Fear and Greed Index. Status code: {response.status_code}")
         return None
 
-def get_bitcoin_news():
-    serpapi_key = os.getenv("SERPAPI_API_KEY")
-    url = "https://serpapi.com/search.json"
-    params = {
-        "engine": "google_news",
-        "q": "btc",
-        "api_key": serpapi_key
-    }
-    
-    try:
-        response = requests.get(url, params=params)
-        response.raise_for_status()
-        data = response.json()
-        
-        news_results = data.get("news_results", [])
-        headlines = []
-        for item in news_results:
-            headlines.append({
-                "title": item.get("title", ""),
-                "date": item.get("date", "")
-            })
-        
-        return headlines[:5]
-    except requests.RequestException as e:
-        logger.error(f"Error fetching news: {e}")
-        return []
-
 # ChromeDriver 설정 (EC2 서버용)
 def create_driver():
     logger.info("ChromeDriver 설정 중...")
@@ -284,6 +257,33 @@ def capture_chart_image(url, imgbb_api_key):
         if driver:
             driver.quit()
 
+def get_bitcoin_news():
+    serpapi_key = os.getenv("SERPAPI_API_KEY")
+    url = "https://serpapi.com/search.json"
+    params = {
+        "engine": "google_news",
+        "q": "btc",
+        "api_key": serpapi_key
+    }
+    
+    try:
+        response = requests.get(url, params=params)
+        response.raise_for_status()
+        data = response.json()
+        
+        news_results = data.get("news_results", [])
+        headlines = []
+        for item in news_results:
+            headlines.append({
+                "title": item.get("title", ""),
+                "date": item.get("date", "")
+            })
+        
+        return headlines[:20]
+    except requests.RequestException as e:
+        logger.error(f"Error fetching news: {e}")
+        return []
+
 def ai_trading():
     # Upbit 객체 생성
     access = os.getenv("UPBIT_ACCESS_KEY")
@@ -316,10 +316,9 @@ def ai_trading():
     krw_btc_chart_image_url = capture_chart_image(krw_btc_chart_url, imgbb_api_key)
     usd_btc_chart_image_url = capture_chart_image(usd_btc_chart_url, imgbb_api_key)
 
-    # 차트 이미지 캡처 후 결과가 없다면 함수 종료
+    # 차트 이미지 캡처 후 결과가 없다면 로그에 기록하지만 거래를 계속 진행
     if not krw_btc_chart_image_url or not usd_btc_chart_image_url:
-        logger.error("차트 이미지 URL 생성 실패. 트레이딩 종료.")
-        return
+        logger.warning("차트 이미지 URL 생성 실패. 차트 이미지를 제외하고 거래를 계속 진행합니다.")
 
     # 2. 오더북(호가 데이터) 조회
     orderbook = pyupbit.get_orderbook("KRW-BTC")
@@ -404,7 +403,12 @@ def ai_trading():
 
                 Based on this trading method, analyze the current market situation and make a judgment by synthesizing it with the provided data and recent performance reflection.
 
-                Important: If the decision is "buy", limit the buy percentage to a maximum of 40% of the available KRW balance. Similarly, if the decision is "sell", limit the sell percentage to a maximum of 40% of held BTC.
+                **There is a strict policy that BTC must maintain at least 30% of the total asset value.**  
+                - If the current BTC proportion is below 30%, your decision must be to increase the BTC proportion to at least 30% by buying BTC using KRW.  
+                - If the BTC proportion is already 30% or above, your decisions to 'buy', 'sell', or 'hold' must account for the fact that at least 30% of the total asset value will always remain in BTC.  
+                - Ensure that all decisions comply with the minimum BTC proportion policy after the transaction is completed.
+
+                **Note: If the decision is "buy", limit the buy percentage to a maximum of 40% of the available KRW balance. Similarly, if the decision is "sell", limit the sell percentage to a maximum of 40% of held BTC.**
 
                 Response format:
                 1. Decision (buy, sell, or hold)
