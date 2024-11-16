@@ -83,7 +83,7 @@ def generate_reflection(trades_df, current_market_data):
     
     # 전체 거래 데이터를 JSON 형식으로 변환하여 AI에 전달
     trades_data = trades_df.to_json(orient='records')
-
+    
     client = OpenAI()
     response = client.chat.completions.create(
         model="gpt-4o-mini",
@@ -284,24 +284,6 @@ def capture_chart_image(url, imgbb_api_key):
         if driver:
             driver.quit()
 
-# # BTC와 KRW 비중에 따른 매수/매도 비율 조정 함수
-# def adjust_trade_percentage(btc_proportion, krw_proportion, decision, base_percentage):
-#     """
-#     Adjust the buy/sell percentage based on BTC and KRW proportions.
-#     - If selling, increase the percentage based on BTC proportion.
-#     - If buying, increase the percentage based on KRW proportion.
-#     """
-#     adjusted_percentage = base_percentage
-#     if decision == "sell":
-#         # BTC 비중이 높을수록 매도 비율 증가
-#         adjusted_percentage += int(btc_proportion * 50)  # 최대 50%까지 추가 매도
-#     elif decision == "buy":
-#         # KRW 비중이 높을수록 매수 비율 증가
-#         adjusted_percentage += int(krw_proportion * 50)  # 최대 50%까지 추가 매수
-    
-#     # 비율을 100%로 제한
-#     return min(adjusted_percentage, 100)
-
 def ai_trading():
     # Upbit 객체 생성
     access = os.getenv("UPBIT_ACCESS_KEY")
@@ -330,27 +312,13 @@ def ai_trading():
     krw_btc_chart_url = "https://upbit.com/full_chart?code=CRIX.UPBIT.KRW-BTC"
     usd_btc_chart_url = "https://upbit.com/full_chart?code=CRIX.UPBIT.USDT-BTC"
     
-    # # 캡처된 이미지 URL을 저장하여 중복 호출 방지
-    # krw_btc_chart_image_url = capture_chart_image(krw_btc_chart_url, imgbb_api_key)
-    # usd_btc_chart_image_url = capture_chart_image(usd_btc_chart_url, imgbb_api_key)
-
-    # # 차트 이미지 캡처 후 결과가 없다면 함수 종료
-    # if not krw_btc_chart_image_url or not usd_btc_chart_image_url:
-    #     logger.error("차트 이미지 URL 생성 실패. 트레이딩 종료.")
-    #     return
-    
-    # 이미지 URL 초기화
-    krw_btc_chart_image_url = None
-    usd_btc_chart_image_url = None
-
-    # 이미지 캡처 및 업로드 시도
+    # 캡처된 이미지 URL을 저장하여 중복 호출 방지
     krw_btc_chart_image_url = capture_chart_image(krw_btc_chart_url, imgbb_api_key)
-    if not krw_btc_chart_image_url:
-        logger.error("KRW-BTC 차트 이미지 캡처 및 업로드 실패")
-
     usd_btc_chart_image_url = capture_chart_image(usd_btc_chart_url, imgbb_api_key)
-    if not usd_btc_chart_image_url:
-        logger.error("USD-BTC 차트 이미지 캡처 및 업로드 실패")
+    
+     # 차트 이미지 캡처 후 결과가 없다면 로그에 기록하지만 거래를 계속 진행
+    if not krw_btc_chart_image_url or not usd_btc_chart_image_url:
+        logger.warning("차트 이미지 URL 생성 실패. 차트 이미지를 제외하고 거래를 계속 진행합니다.")
 
     # 2. 오더북(호가 데이터) 조회
     orderbook = pyupbit.get_orderbook("KRW-BTC")
@@ -410,20 +378,22 @@ def ai_trading():
     # 반성 및 개선 내용 생성
     reflection = generate_reflection(recent_trades, current_market_data)
     
-     # AI 모델 요청 메시지 생성
-    ai_request = f"""Current investment status: {json.dumps(investment_status)}
+    # AI에게 전달할 메시지 생성
+    ai_message_content = f"""Current investment status: {json.dumps(investment_status)}
     Orderbook: {json.dumps(orderbook)}
     Daily OHLCV with indicators (30 days): {df_daily.to_json()}
     Hourly OHLCV with indicators (24 hours): {df_hourly.to_json()}
     Daily OHLCV with indicators (USD-BTC): {df_usd_daily.to_json()}
+    Hourly OHLCV with indicators (USD-BTC): {df_usd_hourly.to_json()}
     Fear and Greed Index: {json.dumps(fear_greed_index)}
     """
 
-    # 차트 이미지 URL 추가 (캡처 실패 시 생략)
     if krw_btc_chart_image_url:
-        ai_request += f"![KRW-BTC Chart]({krw_btc_chart_image_url})\n"
+        ai_message_content += f"\n![KRW-BTC Chart]({krw_btc_chart_image_url})"
+
     if usd_btc_chart_image_url:
-        ai_request += f"![USD-BTC Chart]({usd_btc_chart_image_url})\n"
+        ai_message_content += f"\n![USD-BTC Chart]({usd_btc_chart_image_url})"
+
 
     # AI 모델에 반성 내용 제공
     client = OpenAI()
@@ -448,50 +418,23 @@ def ai_trading():
                 Particularly important is to always refer to the trading method of 'Wonyyotti', a legendary Korean investor, to assess the current situation and make trading decisions. Wonyyotti's trading method is as follows:
                 {youtube_transcript}
 
-                Based on this trading method, analyze the current market situation and make a judgment by synthesizing it with the provided data and recent performance reflection.
+                **Note: There is a policy to maintain a minimum BTC proportion of 30% of the total asset value. Your trading decisions should ensure that after any transaction, the BTC proportion remains at or above 30%. If the current BTC proportion is at or near 30%, you should not make a 'sell' decision. If you decide to 'sell', adjust the sell percentage so that the resulting BTC proportion does not fall below 30%.**
 
-                Important: If the decision is "buy", limit the buy percentage to a maximum of 40% of the available KRW balance. Similarly, if the decision is "sell", limit the sell percentage to a maximum of 40% of held BTC.
+                Important: If the decision is "buy", limit the buy percentage to a maximum of 40% of the available KRW balance. Similarly, if the decision is "sell", limit the sell percentage to a maximum of 40% of held BTC, and ensure that the BTC proportion remains at or above 30% after the sell.
 
                 Response format:
-1. Decision (buy, sell, or hold)
-2. If the decision is 'buy', provide a percentage (1-100) of available KRW to use for buying.
-   If the decision is 'sell', provide a percentage (1-100) of held BTC to sell.
-   If the decision is 'hold', set the percentage to 0.
-3. Reason for your decision
+                1. Decision (buy, sell, or hold)
+                2. If the decision is 'buy', provide a percentage (1-100) of available KRW to use for buying.
+                If the decision is 'sell', provide a percentage (1-100) of held BTC to sell.
+                If the decision is 'hold', set the percentage to 0.
+                3. Reason for your decision
 
-Ensure that the percentage is an integer between 1 and 100 for buy/sell decisions, and exactly 0 for hold decisions.
-Your percentage should reflect the strength of your conviction in the decision based on the analyzed data."""
+                Ensure that the percentage is an integer between 1 and 100 for buy/sell decisions, and exactly 0 for hold decisions.
+                Your percentage should reflect the strength of your conviction in the decision based on the analyzed data."""
             },
             {
                 "role": "user",
-                "content": ai_request
-#               "content": f"""Current investment status: {json.dumps(investment_status)}
-# Orderbook: {json.dumps(orderbook)}
-# Daily OHLCV with indicators (30 days): {df_daily.to_json()}
-# Hourly OHLCV with indicators (24 hours): {df_hourly.to_json()}
-# Daily OHLCV with indicators (USD-BTC): {df_usd_daily.to_json()}
-# Hourly OHLCV with indicators (USD-BTC): {df_usd_hourly.to_json()}
-# Fear and Greed Index: {json.dumps(fear_greed_index)}
-
-# ![KRW-BTC Chart]({krw_btc_chart_image_url})
-# ![USD-BTC Chart]({usd_btc_chart_image_url})"""
-#             }
-#         ],
-#         response_format={
-#             "type": "json_schema",
-#             "json_schema": {
-#                 "name": "trading_decision",
-#                 "strict": True,
-#                 "schema": {
-#                     "type": "object",
-#                     "properties": {
-#                         "decision": {"type": "string", "enum": ["buy", "sell", "hold"]},
-#                         "percentage": {"type": "integer"},
-#                         "reason": {"type": "string"}
-#                     },
-#                     "required": ["decision", "percentage", "reason"],
-#                     "additionalProperties": False
-#                 }
+                "content": ai_message_content
             }
         ],
         max_tokens=4095
