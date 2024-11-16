@@ -403,7 +403,10 @@ def ai_trading():
 
                 Based on this trading method, analyze the current market situation and make a judgment by synthesizing it with the provided data and recent performance reflection.
 
-                **Note: There is a policy to maintain a minimum BTC proportion of 30% of the total asset value. Your trading decisions should ensure that after any transaction, the BTC proportion remains at or above 30%. If the current BTC proportion is at or near 30%, you should not make a 'sell' decision. If you decide to 'sell', adjust the sell percentage so that the resulting BTC proportion does not fall below 30%.**
+                There is a strict policy that BTC must maintain at least 30% of the total asset value.  
+                - If the current BTC proportion is below 30%, your decision must be to increase the BTC proportion to at least 30% by buying BTC using KRW.  
+                - If the BTC proportion is already 30% or above, your decisions to 'buy', 'sell', or 'hold' must account for the fact that at least 30% of the total asset value will always remain in BTC.  
+                - Ensure that all decisions comply with the minimum BTC proportion policy after the transaction is completed.
 
                 **Note: If the decision is "buy", limit the buy percentage to a maximum of 40% of the available KRW balance. Similarly, if the decision is "sell", limit the sell percentage to a maximum of 40% of held BTC.**
 
