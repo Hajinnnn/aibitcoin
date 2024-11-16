@@ -81,11 +81,8 @@ def calculate_performance(trades_df):
 def generate_reflection(trades_df, current_market_data):
     performance = calculate_performance(trades_df)
     
-    # # 최근 거래 데이터 요약 (최신 30개만 추출하고 필요한 열만 선택)
-    # recent_trades_summary = trades_df[['timestamp', 'decision', 'percentage', 'reason']].tail(30).to_json(orient='records')
-    
-     # 전체 거래 데이터를 JSON 형식으로 변환하여 AI에 전달
-    all_trades_data = trades_df.to_json(orient='records')
+    # 전체 거래 데이터를 JSON 형식으로 변환하여 AI에 전달
+    trades_data = trades_df.to_json(orient='records')
 
     client = OpenAI()
     response = client.chat.completions.create(
@@ -99,8 +96,8 @@ def generate_reflection(trades_df, current_market_data):
                 "role": "user",
                 "content": f"""
                 
-                Full trading data:
-                {all_trades_data}
+                Trading data:
+                {trades_data}
                 
                 Current market data:
                 {current_market_data}
@@ -333,14 +330,27 @@ def ai_trading():
     krw_btc_chart_url = "https://upbit.com/full_chart?code=CRIX.UPBIT.KRW-BTC"
     usd_btc_chart_url = "https://upbit.com/full_chart?code=CRIX.UPBIT.USDT-BTC"
     
-    # 캡처된 이미지 URL을 저장하여 중복 호출 방지
-    krw_btc_chart_image_url = capture_chart_image(krw_btc_chart_url, imgbb_api_key)
-    usd_btc_chart_image_url = capture_chart_image(usd_btc_chart_url, imgbb_api_key)
+    # # 캡처된 이미지 URL을 저장하여 중복 호출 방지
+    # krw_btc_chart_image_url = capture_chart_image(krw_btc_chart_url, imgbb_api_key)
+    # usd_btc_chart_image_url = capture_chart_image(usd_btc_chart_url, imgbb_api_key)
 
-    # 차트 이미지 캡처 후 결과가 없다면 함수 종료
-    if not krw_btc_chart_image_url or not usd_btc_chart_image_url:
-        logger.error("차트 이미지 URL 생성 실패. 트레이딩 종료.")
-        return
+    # # 차트 이미지 캡처 후 결과가 없다면 함수 종료
+    # if not krw_btc_chart_image_url or not usd_btc_chart_image_url:
+    #     logger.error("차트 이미지 URL 생성 실패. 트레이딩 종료.")
+    #     return
+    
+    # 이미지 URL 초기화
+    krw_btc_chart_image_url = None
+    usd_btc_chart_image_url = None
+
+    # 이미지 캡처 및 업로드 시도
+    krw_btc_chart_image_url = capture_chart_image(krw_btc_chart_url, imgbb_api_key)
+    if not krw_btc_chart_image_url:
+        logger.error("KRW-BTC 차트 이미지 캡처 및 업로드 실패")
+
+    usd_btc_chart_image_url = capture_chart_image(usd_btc_chart_url, imgbb_api_key)
+    if not usd_btc_chart_image_url:
+        logger.error("USD-BTC 차트 이미지 캡처 및 업로드 실패")
 
     # 2. 오더북(호가 데이터) 조회
     orderbook = pyupbit.get_orderbook("KRW-BTC")
@@ -400,6 +410,21 @@ def ai_trading():
     # 반성 및 개선 내용 생성
     reflection = generate_reflection(recent_trades, current_market_data)
     
+     # AI 모델 요청 메시지 생성
+    ai_request = f"""Current investment status: {json.dumps(investment_status)}
+    Orderbook: {json.dumps(orderbook)}
+    Daily OHLCV with indicators (30 days): {df_daily.to_json()}
+    Hourly OHLCV with indicators (24 hours): {df_hourly.to_json()}
+    Daily OHLCV with indicators (USD-BTC): {df_usd_daily.to_json()}
+    Fear and Greed Index: {json.dumps(fear_greed_index)}
+    """
+
+    # 차트 이미지 URL 추가 (캡처 실패 시 생략)
+    if krw_btc_chart_image_url:
+        ai_request += f"![KRW-BTC Chart]({krw_btc_chart_image_url})\n"
+    if usd_btc_chart_image_url:
+        ai_request += f"![USD-BTC Chart]({usd_btc_chart_image_url})\n"
+
     # AI 모델에 반성 내용 제공
     client = OpenAI()
     response = client.chat.completions.create(
@@ -439,35 +464,36 @@ Your percentage should reflect the strength of your conviction in the decision b
             },
             {
                 "role": "user",
-                "content": f"""Current investment status: {json.dumps(investment_status)}
-Orderbook: {json.dumps(orderbook)}
-Daily OHLCV with indicators (30 days): {df_daily.to_json()}
-Hourly OHLCV with indicators (24 hours): {df_hourly.to_json()}
-Daily OHLCV with indicators (USD-BTC): {df_usd_daily.to_json()}
-Hourly OHLCV with indicators (USD-BTC): {df_usd_hourly.to_json()}
-Fear and Greed Index: {json.dumps(fear_greed_index)}
+                "content": ai_request
+#               "content": f"""Current investment status: {json.dumps(investment_status)}
+# Orderbook: {json.dumps(orderbook)}
+# Daily OHLCV with indicators (30 days): {df_daily.to_json()}
+# Hourly OHLCV with indicators (24 hours): {df_hourly.to_json()}
+# Daily OHLCV with indicators (USD-BTC): {df_usd_daily.to_json()}
+# Hourly OHLCV with indicators (USD-BTC): {df_usd_hourly.to_json()}
+# Fear and Greed Index: {json.dumps(fear_greed_index)}
 
-![KRW-BTC Chart]({krw_btc_chart_image_url})
-![USD-BTC Chart]({usd_btc_chart_image_url})"""
+# ![KRW-BTC Chart]({krw_btc_chart_image_url})
+# ![USD-BTC Chart]({usd_btc_chart_image_url})"""
+#             }
+#         ],
+#         response_format={
+#             "type": "json_schema",
+#             "json_schema": {
+#                 "name": "trading_decision",
+#                 "strict": True,
+#                 "schema": {
+#                     "type": "object",
+#                     "properties": {
+#                         "decision": {"type": "string", "enum": ["buy", "sell", "hold"]},
+#                         "percentage": {"type": "integer"},
+#                         "reason": {"type": "string"}
+#                     },
+#                     "required": ["decision", "percentage", "reason"],
+#                     "additionalProperties": False
+#                 }
             }
         ],
-        response_format={
-            "type": "json_schema",
-            "json_schema": {
-                "name": "trading_decision",
-                "strict": True,
-                "schema": {
-                    "type": "object",
-                    "properties": {
-                        "decision": {"type": "string", "enum": ["buy", "sell", "hold"]},
-                        "percentage": {"type": "integer"},
-                        "reason": {"type": "string"}
-                    },
-                    "required": ["decision", "percentage", "reason"],
-                    "additionalProperties": False
-                }
-            }
-        },
         max_tokens=4095
     )
 
