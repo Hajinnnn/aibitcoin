@@ -315,8 +315,8 @@ def ai_trading():
     # 캡처된 이미지 URL을 저장하여 중복 호출 방지
     krw_btc_chart_image_url = capture_chart_image(krw_btc_chart_url, imgbb_api_key)
     usd_btc_chart_image_url = capture_chart_image(usd_btc_chart_url, imgbb_api_key)
-    
-     # 차트 이미지 캡처 후 결과가 없다면 로그에 기록하지만 거래를 계속 진행
+
+        # 차트 이미지 캡처 후 결과가 없다면 로그에 기록하지만 거래를 계속 진행
     if not krw_btc_chart_image_url or not usd_btc_chart_image_url:
         logger.warning("차트 이미지 URL 생성 실패. 차트 이미지를 제외하고 거래를 계속 진행합니다.")
 
@@ -378,23 +378,6 @@ def ai_trading():
     # 반성 및 개선 내용 생성
     reflection = generate_reflection(recent_trades, current_market_data)
     
-    # AI에게 전달할 메시지 생성
-    ai_message_content = f"""Current investment status: {json.dumps(investment_status)}
-    Orderbook: {json.dumps(orderbook)}
-    Daily OHLCV with indicators (30 days): {df_daily.to_json()}
-    Hourly OHLCV with indicators (24 hours): {df_hourly.to_json()}
-    Daily OHLCV with indicators (USD-BTC): {df_usd_daily.to_json()}
-    Hourly OHLCV with indicators (USD-BTC): {df_usd_hourly.to_json()}
-    Fear and Greed Index: {json.dumps(fear_greed_index)}
-    """
-
-    if krw_btc_chart_image_url:
-        ai_message_content += f"\n![KRW-BTC Chart]({krw_btc_chart_image_url})"
-
-    if usd_btc_chart_image_url:
-        ai_message_content += f"\n![USD-BTC Chart]({usd_btc_chart_image_url})"
-
-
     # AI 모델에 반성 내용 제공
     client = OpenAI()
     response = client.chat.completions.create(
@@ -418,25 +401,53 @@ def ai_trading():
                 Particularly important is to always refer to the trading method of 'Wonyyotti', a legendary Korean investor, to assess the current situation and make trading decisions. Wonyyotti's trading method is as follows:
                 {youtube_transcript}
 
+                Based on this trading method, analyze the current market situation and make a judgment by synthesizing it with the provided data and recent performance reflection.
+
                 **Note: There is a policy to maintain a minimum BTC proportion of 30% of the total asset value. Your trading decisions should ensure that after any transaction, the BTC proportion remains at or above 30%. If the current BTC proportion is at or near 30%, you should not make a 'sell' decision. If you decide to 'sell', adjust the sell percentage so that the resulting BTC proportion does not fall below 30%.**
 
-                Important: If the decision is "buy", limit the buy percentage to a maximum of 40% of the available KRW balance. Similarly, if the decision is "sell", limit the sell percentage to a maximum of 40% of held BTC, and ensure that the BTC proportion remains at or above 30% after the sell.
+                **Note: If the decision is "buy", limit the buy percentage to a maximum of 40% of the available KRW balance. Similarly, if the decision is "sell", limit the sell percentage to a maximum of 40% of held BTC.**
 
                 Response format:
-                1. Decision (buy, sell, or hold)
-                2. If the decision is 'buy', provide a percentage (1-100) of available KRW to use for buying.
-                If the decision is 'sell', provide a percentage (1-100) of held BTC to sell.
-                If the decision is 'hold', set the percentage to 0.
-                3. Reason for your decision
+1. Decision (buy, sell, or hold)
+2. If the decision is 'buy', provide a percentage (1-100) of available KRW to use for buying.
+   If the decision is 'sell', provide a percentage (1-100) of held BTC to sell.
+   If the decision is 'hold', set the percentage to 0.
+3. Reason for your decision
 
-                Ensure that the percentage is an integer between 1 and 100 for buy/sell decisions, and exactly 0 for hold decisions.
-                Your percentage should reflect the strength of your conviction in the decision based on the analyzed data."""
+Ensure that the percentage is an integer between 1 and 100 for buy/sell decisions, and exactly 0 for hold decisions.
+Your percentage should reflect the strength of your conviction in the decision based on the analyzed data."""
             },
             {
                 "role": "user",
-                "content": ai_message_content
+                "content": f"""Current investment status: {json.dumps(investment_status)}
+Orderbook: {json.dumps(orderbook)}
+Daily OHLCV with indicators (30 days): {df_daily.to_json()}
+Hourly OHLCV with indicators (24 hours): {df_hourly.to_json()}
+Daily OHLCV with indicators (USD-BTC): {df_usd_daily.to_json()}
+Hourly OHLCV with indicators (USD-BTC): {df_usd_hourly.to_json()}
+Fear and Greed Index: {json.dumps(fear_greed_index)}
+
+![KRW-BTC Chart]({krw_btc_chart_image_url})
+![USD-BTC Chart]({usd_btc_chart_image_url})"""
             }
         ],
+        response_format={
+            "type": "json_schema",
+            "json_schema": {
+                "name": "trading_decision",
+                "strict": True,
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "decision": {"type": "string", "enum": ["buy", "sell", "hold"]},
+                        "percentage": {"type": "integer"},
+                        "reason": {"type": "string"}
+                    },
+                    "required": ["decision", "percentage", "reason"],
+                    "additionalProperties": False
+                }
+            }
+        },
         max_tokens=4095
     )
 
