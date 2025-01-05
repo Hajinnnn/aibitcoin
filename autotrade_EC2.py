@@ -429,16 +429,14 @@ def ai_trading():
                 - If the BTC proportion is already 30% or above, your decisions to 'buy', 'sell', or 'hold' must account for the fact that at least 30% of the total asset value will always remain in BTC.  
                 - Ensure that all decisions comply with the minimum BTC proportion policy after the transaction is completed.
 
-                **Note: If the decision is "buy", limit the buy percentage to a maximum of 20% of the available KRW balance. Similarly, if the decision is "sell", limit the sell percentage to a maximum of 20% of held BTC.**
-
                 Response format:
 1. Decision (buy, sell, or hold)
-2. If the decision is 'buy', provide a percentage (1-100) of available KRW to use for buying.
-   If the decision is 'sell', provide a percentage (1-100) of held BTC to sell.
+2. If the decision is 'buy', provide a percentage (1-20) of available KRW to use for buying.
+   If the decision is 'sell', provide a percentage (1-20) of held BTC to sell.
    If the decision is 'hold', set the percentage to 0.
 3. Reason for your decision
 
-Ensure that the percentage is an integer between 1 and 100 for buy/sell decisions, and exactly 0 for hold decisions.
+Ensure that the percentage is an integer between 1 and 20 for buy/sell decisions, and exactly 0 for hold decisions.
 Your percentage should reflect the strength of your conviction in the decision based on the analyzed data."""
             },
             {
