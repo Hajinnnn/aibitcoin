@@ -189,7 +189,10 @@ def get_fear_and_greed_index():
         logger.error(f"Failed to fetch Fear and Greed Index. Status code: {response.status_code}")
         return None
 
-def get_bitcoin_news():
+def get_bitcoin_news(fetch_news):
+    if not fetch_news:  # 뉴스 조회 조건 추가
+        return []       # 조건에 맞지 않으면 빈 리스트 반환
+
     serpapi_key = os.getenv("SERPAPI_API_KEY")
     url = "https://serpapi.com/search.json"
     params = {
@@ -211,7 +214,7 @@ def get_bitcoin_news():
                 "date": item.get("date", "")
             })
         
-        return headlines[:5]
+        return headlines[:30]
     except requests.RequestException as e:
         logger.error(f"Error fetching news: {e}")
         return []
@@ -369,15 +372,12 @@ def ai_trading():
 
     # 6. 뉴스 헤드라인 가져오기
     # ---- 시간대별 뉴스 호출 분기 처리 (0시·8시·16시에만 뉴스 불러오기) ----
-    # 원하는 시간대: 0, 8, 16 (예: 한국시간 기준이라면 pytz.timezone("Asia/Seoul") 사용)
     now_kst = datetime.now(pytz.timezone("Asia/Seoul"))
     current_hour = now_kst.hour
 
-    if current_hour in [0, 8, 16]:
-        news_headlines = get_bitcoin_news()
-    else:
-        news_headlines = []
-    # -------------------------------------------------------------
+    # 특정 시간대만 뉴스 조회 허용
+    fetch_news = current_hour in [0, 8, 16]  # True or False 반환
+    news_headlines = get_bitcoin_news(fetch_news)  # fetch_news 값 전달
 
     # 7. YouTube 자막 데이터 가져오기
     with open("strategy.txt", "r", encoding="utf-8") as f:
